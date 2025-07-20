@@ -9,19 +9,6 @@ interface LottoHistoryDraw {
   bonus: number;
 }
 
-const ballColors = [
-  "bg-blue-500 text-white",
-  "bg-green-500 text-white",
-  "bg-yellow-400 text-gray-900",
-  "bg-red-500 text-white",
-  "bg-purple-500 text-white",
-  "bg-pink-500 text-white",
-  "bg-orange-400 text-white",
-  "bg-teal-500 text-white",
-  "bg-indigo-500 text-white",
-  "bg-lime-400 text-gray-900",
-];
-
 export default function Home() {
   const [numbers, setNumbers] = useState<number[]>([]);
   const [history, setHistory] = useState<LottoHistoryDraw[]>([]);
@@ -30,11 +17,11 @@ export default function Home() {
   const [searchRound, setSearchRound] = useState("");
   const [filtered, setFiltered] = useState<LottoHistoryDraw | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
-  const inputRef = useRef(null);
-  const dropdownRef = useRef(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const [savedCombos, setSavedCombos] = useState<{numbers: number[], savedAt: Date}[]>([]);
   const [tooltipIdx, setTooltipIdx] = useState<number | null>(null);
-  const tooltipTimeout = useRef<NodeJS.Timeout | null>(null);
+  const tooltipTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [lockedNumbers, setLockedNumbers] = useState<(number | '')[]>(['', '', '', '', '', '']);
 
   // Fetch lotto history on mount
@@ -246,12 +233,12 @@ export default function Home() {
   function handleGenerate() {
     if (selectedMethod === 'semi') {
       // 반자동: Fill in locked numbers, generate the rest randomly
-      let locked = lockedNumbers.map(v => (v === '' ? '' : Number(v)));
-      let used = new Set<number>(locked.filter(n => n !== '') as number[]);
-      let fillCount = locked.filter(n => n === '').length;
-      let generated: number[] = [];
+      const locked = lockedNumbers.map(v => (v === '' ? '' : Number(v)));
+      const used = new Set<number>(locked.filter(n => n !== '') as number[]);
+      const fillCount = locked.filter(n => n === '').length;
+      const generated: number[] = [];
       function fillWithNoDupes() {
-        let pool = generateRandom().filter(n => !used.has(n));
+        const pool = generateRandom().filter(n => !used.has(n));
         let idx = 0;
         while (generated.length < fillCount && idx < pool.length) {
           if (!used.has(pool[idx])) {
@@ -261,7 +248,7 @@ export default function Home() {
           idx++;
         }
         while (generated.length < fillCount) {
-          let n = Math.floor(Math.random() * 45) + 1;
+          const n = Math.floor(Math.random() * 45) + 1;
           if (!used.has(n)) {
             generated.push(n);
             used.add(n);
@@ -269,7 +256,7 @@ export default function Home() {
         }
       }
       fillWithNoDupes();
-      let result: number[] = [];
+      const result: number[] = [];
       let genIdx = 0;
       for (let i = 0; i < 6; i++) {
         if (locked[i] !== '') result.push(Number(locked[i]));
@@ -289,20 +276,10 @@ export default function Home() {
     }
   }
 
-  // Helper for number ball color class
-  function getBallColorClass(n: number, isBonus = false, isHit = false) {
-    if (isHit) return 'number-ball-hit';
-    if (isBonus) return 'number-ball-bonus';
-    return 'number-ball-main';
-  }
-
   // Pick the latest draw (highest round number)
   const latestDraw = history.length > 0 ? history.reduce((a, b) => (a.round > b.round ? a : b)) : null;
 
   // Get all available rounds for dropdown (sorted descending)
-  const availableRounds = history.map(d => d.round).sort((a, b) => b - a);
-
-  // Filtered rounds for dropdown
   const filteredRounds = searchRound
     ? history.filter(d => d.round.toString().includes(searchRound)).sort((a, b) => b.round - a.round)
     : history.slice().sort((a, b) => b.round - a.round);
@@ -312,9 +289,9 @@ export default function Home() {
     function handleClickOutside(event: MouseEvent) {
       if (
         dropdownRef.current &&
-        !(dropdownRef.current as any).contains(event.target) &&
+        !dropdownRef.current.contains(event.target as Node) &&
         inputRef.current &&
-        !(inputRef.current as any).contains(event.target)
+        !inputRef.current.contains(event.target as Node)
       ) {
         setShowDropdown(false);
       }
@@ -328,31 +305,6 @@ export default function Home() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [showDropdown]);
-
-  // Official Korean lottery color scheme for balls
-  function getLottoBallColor(n: number) {
-    if (n >= 1 && n <= 10) return 'bg-[#fbc400] text-gray-900 border-yellow-300';
-    if (n >= 11 && n <= 20) return 'bg-[#69c8f2] text-white border-blue-200';
-    if (n >= 21 && n <= 30) return 'bg-[#ff7272] text-white border-red-200';
-    if (n >= 31 && n <= 40) return 'bg-[#aaa] text-white border-gray-300';
-    if (n >= 41 && n <= 45) return 'bg-[#b0d840] text-white border-green-200';
-    return 'bg-gray-200 text-gray-700 border-gray-300';
-  }
-
-  // Unified, extra-large ball size class
-  const ballClass = "w-20 h-20 flex items-center justify-center rounded-full font-extrabold text-3xl leading-none shadow-xl border-4";
-  const mainBallClass = `${ballClass} border-yellow-400 shadow-2xl ring-2 ring-yellow-200`;
-
-  // SVG mascot (simple smiling lotto ball)
-  const Mascot = () => (
-    <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="20" cy="20" r="20" fill="#3583FF"/>
-      <ellipse cx="20" cy="28" rx="8" ry="4" fill="#fff"/>
-      <circle cx="14" cy="17" r="2" fill="#fff"/>
-      <circle cx="26" cy="17" r="2" fill="#fff"/>
-      <path d="M15 23c1.5 2 8.5 2 10 0" stroke="#fff" strokeWidth="2" strokeLinecap="round"/>
-    </svg>
-  );
 
   function getLottoRank(combo: { numbers: number[], savedAt: Date }, latestDraw: LottoHistoryDraw | null) {
     if (!latestDraw) return null;
@@ -421,7 +373,7 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="number-balls-row items-center flex-nowrap justify-center mb-1" style={{ minWidth: 0 }}>
-                  {latestDraw.numbers.map((n, i) => (
+                  {latestDraw.numbers.map((n) => (
                     <NumberBall key={n} number={n} variant="main" />
                   ))}
                   <NumberBall number={latestDraw.bonus} variant="bonus" />
@@ -462,8 +414,8 @@ export default function Home() {
               marginTop: selectedMethod === 'semi' ? 0 : '1.2rem',
             }}
           >
-            {numbers.map((n, i) => (
-              <NumberBall key={n} number={n} variant="main" className={selectedMethod === 'semi' && lockedNumbers[i] === n ? 'locked-ball number-ball-lg' : 'number-ball-lg'} />
+            {numbers.map((n) => (
+              <NumberBall key={n} number={n} variant="main" className={selectedMethod === 'semi' && lockedNumbers[numbers.indexOf(n)] === n ? 'locked-ball number-ball-lg' : 'number-ball-lg'} />
             ))}
           </div>
         ) : (
@@ -479,7 +431,7 @@ export default function Home() {
             <div key={m.id} style={{ position: 'relative', display: 'inline-block' }}>
               <button
                 className={`generator-method-btn${selectedMethod === m.id ? ' selected' : ''}`}
-                onClick={e => {
+                onClick={() => {
                   if (tooltipIdx === idx) {
                     setTooltipIdx(null);
                     setSelectedMethod(m.id);
@@ -611,8 +563,8 @@ export default function Home() {
                   max={45}
                   value={val}
                   onChange={e => {
-                    let v = e.target.value;
-                    let n: number | '' = v === '' ? '' : Math.max(1, Math.min(45, Number(v)));
+                    const v = e.target.value;
+                    const n: number | '' = v === '' ? '' : Math.max(1, Math.min(45, Number(v)));
                     // Prevent duplicates
                     if (n !== '' && lockedNumbers.some((num, i) => i !== idx && num === n)) return;
                     const next: (number | '')[] = [...lockedNumbers];
@@ -845,8 +797,8 @@ export default function Home() {
                   <div key={combo.savedAt.getTime() + '-' + combo.numbers.join('-')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.2rem', padding: '0.2rem 0.1rem', borderBottom: '1px solid #f1f5f9', minHeight: '2.6rem' }}>
                     <div className="number-balls-row flex-nowrap" style={{ fontSize: '1.15rem', gap: '0.18rem', flexWrap: 'nowrap' }}>
                       {combo.numbers.map((n: number, i: number) => {
-                        let isMatch = mainSet.has(n);
-                        let isBonus = bonus === n;
+                        const isMatch = mainSet.has(n);
+                        const isBonus = bonus === n;
                         let ballClass = '';
                         if (isMatch) ballClass = '';
                         else if (isBonus) ballClass = '';
