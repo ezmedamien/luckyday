@@ -1,6 +1,6 @@
 import React, { Component, ReactNode } from 'react';
-import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
+import Button from '@/components/ui/Button';
+import Card from '@/components/ui/Card';
 
 interface ErrorBoundaryState {
   hasError: boolean;
