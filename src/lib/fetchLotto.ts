@@ -141,7 +141,7 @@ export function getAllLottoHistory(): LottoHistoryDraw[] {
     path.join(process.cwd(), 'maindata_raw', 'raw', 'lotto_1-600.xls'),
     path.join(process.cwd(), 'maindata_raw', 'raw', 'lotto_601-1180.xls'),
   ];
-  let allRows: any[] = [];
+  let allRows: unknown[] = [];
   for (const file of files) {
     const workbook = XLSX.readFile(file);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -152,10 +152,10 @@ export function getAllLottoHistory(): LottoHistoryDraw[] {
   allRows = allRows.filter((_, idx) => idx >= 3);
   // Map to LottoHistoryDraw objects
   const draws: LottoHistoryDraw[] = allRows.map((row) => {
-    const round = Number(row[1]); // 회차
-    const date = row[2]; // 추첨일
-    const numbers = [row[13], row[14], row[15], row[16], row[17], row[18]].map(Number); // N-T (1-6)
-    const bonus = Number(row[19]); // T (보너스)
+    const round = Number((row as string[])[1]); // 회차
+    const date = (row as string[])[2]; // 추첨일
+    const numbers = [(row as string[])[13], (row as string[])[14], (row as string[])[15], (row as string[])[16], (row as string[])[17], (row as string[])[18]].map(Number); // N-T (1-6)
+    const bonus = Number((row as string[])[19]); // T (보너스)
     return { round, date, numbers, bonus };
   }).filter(d => d.round && d.numbers.every(n => !isNaN(n)) && !isNaN(d.bonus));
   return draws;
@@ -165,18 +165,18 @@ export function getAllLottoHistoryFromCSV(): LottoHistoryDraw[] {
   const filePath = path.join(process.cwd(), 'maindata_raw', 'raw', 'Lottery_Full_Raw_Data.csv');
   const csv = fs.readFileSync(filePath, 'utf-8');
   const records = parse(csv, { columns: true, skip_empty_lines: true });
-  return records.map((row: any) => {
-    const round = Number(row["Round"]);
-    const date = row["Date"];
+  return records.map((row: unknown) => {
+    const round = Number((row as { Round: string })["Round"]);
+    const date = (row as { Date: string })["Date"];
     const numbers = [
-      Number(row["winning_number_first_digit"]),
-      Number(row["winning_number_second_digit"]),
-      Number(row["winning_number_third_digit"]),
-      Number(row["winning_number_fourth_digit"]),
-      Number(row["winning_number_fifth_digit"]),
-      Number(row["winning_number_sixth_digit"])
+      Number((row as { "winning_number_first_digit": string })["winning_number_first_digit"]),
+      Number((row as { "winning_number_second_digit": string })["winning_number_second_digit"]),
+      Number((row as { "winning_number_third_digit": string })["winning_number_third_digit"]),
+      Number((row as { "winning_number_fourth_digit": string })["winning_number_fourth_digit"]),
+      Number((row as { "winning_number_fifth_digit": string })["winning_number_fifth_digit"]),
+      Number((row as { "winning_number_sixth_digit": string })["winning_number_sixth_digit"])
     ];
-    const bonus = Number(row["winning_number_bonus_digit"]);
+    const bonus = Number((row as { "winning_number_bonus_digit": string })["winning_number_bonus_digit"]);
     return { round, date, numbers, bonus };
   }).filter(d => d.round && d.numbers.every((n: number) => !isNaN(n)) && !isNaN(d.bonus));
 } 
