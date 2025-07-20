@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "LuckyDay Lotto Generator",
+    "slug": "luckyday",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./public/next.svg",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./public/next.svg",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./public/next.svg",
+        "backgroundColor": "#ffffff"
+      }
+    },
+    "web": {
+      "favicon": "./public/favicon.ico"
+    },
+    "plugins": [],
+    "platforms": ["ios", "android", "web"],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "e76a1cf4-0b7b-4f4c-855c-53b97a9d31fa"
+      }
+    },
+    "owner": "ezmedamien"
+  }
+}

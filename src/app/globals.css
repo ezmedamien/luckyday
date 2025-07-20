@@ -1,26 +1,470 @@
-@import "tailwindcss";
+/* 🌐 GLOBAL FONT: Pretendard Variable */
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css");
 
+/* 🎨 COLOR VARIABLES */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --primary: #0064FF;
+  --primary-dark: #0049B1;
+  --accent-pink: #FF4D94;
+  --gray-050: #F7F9FC;
+  --gray-900: #111111;
+  --off-white: #FAFAFA;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ✅ BODY BASELINE */
+body {
+  background: var(--gray-050);
+  color: var(--gray-900);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ✅ TYPOGRAPHY TOKENS */
+.display-xl { font-size: 2.25rem; font-weight: 700; }
+@media (min-width: 768px) { .display-xl { font-size: 3rem; } }
+.heading-lg { font-size: 1.5rem; font-weight: 700; }
+@media (min-width: 768px) { .heading-lg { font-size: 1.875rem; } }
+.heading-md { font-size: 1.25rem; font-weight: 600; }
+.body-lg    { font-size: 1rem; font-weight: 500; }
+.body-sm    { font-size: 0.875rem; font-weight: 400; }
+
+/* ✅ BUTTONS */
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  font-weight: 700;
+  font-size: 1rem;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  transition: background 0.15s, transform 0.15s;
+}
+.btn-primary:hover     { background: var(--primary-dark); }
+.btn-primary:disabled  { opacity: 0.4; cursor: not-allowed; }
+.btn-primary:active    { transform: scale(0.99); }
+
+.btn-secondary {
+  background: var(--gray-050);
+  color: var(--gray-900);
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  font-weight: 700;
+  font-size: 1rem;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  transition: border 0.15s, color 0.15s;
+}
+.btn-secondary:hover { border-color: var(--primary); color: var(--primary); }
+
+.btn-icon {
+  width: 2.5rem; height: 2.5rem;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--primary);
+  transition: background 0.15s;
+}
+.btn-icon:hover { background: rgba(0,100,255,0.1); }
+
+.btn-loading {
+  display: flex; align-items: center; gap: 0.5rem;
+}
+.btn-loading .spinner {
+  animation: spin 1s linear infinite;
+  width: 1rem; height: 1rem;
+  border: 2px solid #fff;
+  border-top-color: transparent;
+  border-radius: 9999px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ✅ LOTTO NUMBER BALLS */
+.number-ball {
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 9999px;
+  font-weight: 500;
+  color: #fff;
+  font-size: 1rem;
+  user-select: none;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+  width: 2rem; height: 2rem; min-width: 2rem; min-height: 2rem;
+  background: #3583FF;
+  font-family: 'Pretendard Variable', monospace;
+}
+@media (min-width: 768px) {
+  .number-ball {
+    width: 2.5rem; height: 2.5rem; min-width: 2.5rem; min-height: 2.5rem;
+    font-size: 1.25rem;
+  }
+}
+.number-ball-main  { background-color: #3583FF; }
+.number-ball-bonus { background-color: #FF4D94; }
+.number-ball-hit   { background-color: #22C55E; }
+
+.number-ball-lg {
+  width: 4.5rem !important;
+  height: 4.5rem !important;
+  min-width: 4.5rem !important;
+  min-height: 4.5rem !important;
+  font-size: 2.2rem !important;
+  font-weight: 700;
+}
+@media (min-width: 768px) {
+  .number-ball-lg {
+    width: 5.5rem !important;
+    height: 5.5rem !important;
+    min-width: 5.5rem !important;
+    min-height: 5.5rem !important;
+    font-size: 2.7rem !important;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ✅ HORIZONTAL NUMBER BALLS ROW */
+.number-balls-row {
+  display: flex;
+  flex-direction: row;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+@media (min-width: 768px) {
+  .number-balls-row {
+    gap: 0.5rem;
+  }
+}
+
+.historicals-right .number-balls-row {
+  justify-content: flex-end;
+}
+
+/* ✅ CARD STYLES */
+.card {
+  background: #fff;
+  border-radius: 1rem;
+  box-shadow: 0 4px 20px rgba(79, 93, 255, 0.1);
+  padding: 1rem;
+}
+@media (min-width: 768px) { .card { padding: 1.5rem; } }
+.card-generator {
+  border: 1px solid rgba(0,100,255,0.2);
+}
+.duo-card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(79, 93, 255, 0.1);
+  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.duo-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(79, 93, 255, 0.15);
+}
+
+.main-generator-card {
+  max-width: 800px;
+  min-width: 400px;
+  min-height: 380px;
+  box-shadow: 0 12px 48px rgba(0,100,255,0.12), 0 2px 12px rgba(0,0,0,0.06);
+  border-width: 4px;
+  border-radius: 2.5rem;
+  background: #fff;
+  margin-top: 3rem;
+  margin-bottom: 3rem;
+  padding: 3rem 2.5rem 3rem 2.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+@media (max-width: 600px) {
+  .main-generator-card {
+    min-width: 0;
+    padding: 1.5rem 0.5rem;
+  }
+  .card,
+  .card-generator,
+  .search-card,
+  .page-banner,
+  .section-spacing {
+    padding: 1rem 0.5rem;
+    border-radius: 1rem;
+  }
+}
+
+/* Add more vertical margin between major sections */
+.page-banner {
+  margin-bottom: 3rem;
+}
+.section-spacing {
+  margin-bottom: 2.5rem;
+}
+
+/* ✅ HEADER / BANNER */
+.page-banner {
+  width: 100%;
+  background: var(--primary);
+  color: #fff;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+  padding-top: 1.5rem; padding-bottom: 1.5rem;
+}
+@media (min-width: 768px) {
+  .page-banner { padding-top: 3rem; padding-bottom: 3rem; }
+}
+.banner-title { font-size: 2.25rem; font-weight: 700; color: #fff; }
+@media (min-width: 768px) { .banner-title { font-size: 3rem; } }
+.banner-subtitle { font-size: 1rem; font-weight: 500; color: #fff; margin-top: 0.5rem; }
+.banner-wave {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  width: 100%; height: 24px;
+}
+@media (min-width: 768px) {
+  .banner-wave { height: 40px; }
+}
+
+/* ✅ SPACING UTILITIES */
+.section-spacing { padding-left: 1rem; padding-right: 1rem; }
+@media (min-width: 768px) { .section-spacing { padding-left: 0; padding-right: 0; } }
+.gap-balls {
+  gap: 0.25rem;
+}
+@media (min-width: 768px) {
+  .gap-balls { gap: 0.5rem; }
+}
+
+/* ✅ MASCOT ANIMATION */
+.mascot {
+  animation: mascotWobble 2s ease-in-out infinite;
+}
+@keyframes mascotWobble {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-2deg); }
+  75% { transform: rotate(2deg); }
+}
+
+/* ✅ ACCESSIBILITY */
+:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* ✅ CENTER MAIN CONTENT */
+.container-center {
+  max-width: 100vw;
+  margin-left: auto;
+  margin-right: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.card,
+.card-generator,
+.search-card,
+.page-banner,
+.section-spacing,
+.number-balls-row {
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+}
+
+/* Make search result card wider and add padding */
+.card-generator,
+.search-card {
+  min-width: 380px;
+  max-width: 100%;
+  padding-left: 2.5rem;
+  padding-right: 2.5rem;
+}
+
+/* Make main generator card even wider */
+.main-generator-card {
+  max-width: 950px;
+  min-width: 500px;
+  padding-left: 3.5rem;
+  padding-right: 3.5rem;
+}
+
+/* Make generator method buttons cuter and more spaced out */
+.generator-methods-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.2rem;
+  justify-content: center;
+  margin-bottom: 2.5rem;
+}
+.generator-method-btn {
+  border-radius: 2rem;
+  box-shadow: 0 2px 8px rgba(0,100,255,0.08);
+  padding: 0.9rem 2.2rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0.2rem 0.2rem;
+  transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+  background: #f7f9fc;
+  color: var(--primary);
+  border: 2px solid #e0e7ff;
+}
+.generator-method-btn.selected {
+  background: #ffe066;
+  color: #b45309;
+  border-color: #ffd700;
+  box-shadow: 0 4px 16px rgba(255,224,102,0.18);
+}
+.generator-method-btn:hover {
+  background: #e0e7ff;
+  color: #0049B1;
+}
+
+.personal-method-btn {
+  border-radius: 1.5rem;
+  box-shadow: 0 1px 4px rgba(0,100,255,0.07);
+  padding: 0.6rem 1.3rem;
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0.15rem 0.15rem;
+  transition: background 0.16s, color 0.16s, box-shadow 0.16s;
+  background: #f7f9fc;
+  color: var(--primary);
+  border: 2px solid #e0e7ff;
+  outline: none;
+  cursor: pointer;
+}
+.personal-method-btn.selected {
+  background: #ffe066;
+  color: #b45309;
+  border-color: #ffd700;
+  box-shadow: 0 2px 8px rgba(255,224,102,0.13);
+}
+.personal-method-btn:hover {
+  background: #e0e7ff;
+  color: #0049B1;
+}
+
+.personal-method-select {
+  border-radius: 1.5rem;
+  background: #f7f9fc;
+  color: var(--primary);
+  border: 2px solid #e0e7ff;
+  padding: 0.6rem 1.2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0.15rem 0.15rem;
+  outline: none;
+  transition: border 0.16s, background 0.16s, color 0.16s;
+  box-shadow: 0 1px 4px rgba(0,100,255,0.07);
+}
+.personal-method-select:focus {
+  border-color: #ffd700;
+  background: #e0e7ff;
+}
+
+@media (max-width: 600px) {
+  .main-generator-card {
+    min-width: 0;
+    padding: 1.2rem 0.5rem;
+    max-width: 100vw;
+  }
+  .card-generator,
+  .search-card {
+    min-width: 0;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+}
+
+.historicals-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  justify-content: flex-start;
+}
+@media (min-width: 768px) {
+  .historicals-row {
+    flex-direction: row;
+    gap: 3rem;
+    justify-content: space-between;
+  }
+}
+.historicals-left {
+  align-items: flex-start !important;
+  text-align: left !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  width: 100%;
+}
+.historicals-right {
+  align-items: flex-end !important;
+  text-align: right !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+}
+
+.two-col-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  width: 100%;
+}
+@media (min-width: 768px) {
+  .two-col-row {
+    flex-direction: row;
+    gap: 2rem;
+    width: 100%;
+  }
+}
+.two-col-card {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+@media (min-width: 768px) {
+  .two-col-card {
+    width: 50%;
+    min-width: 0;
+  }
+}
+
+.card-generator, .two-col-card {
+  overflow-x: auto;
+}
+
+/*
+Lotto Ball Range Colors (custom palette)
+| Range      | Color Name   | Hex      | Class Name         |
+| ---------- | ------------|----------|--------------------|
+| 1–10       | Sky Blue    | #D0E7FF  | .lotto-range-1     |
+| 11–20      | Toss Blue   | #0064FF  | .lotto-range-2     |
+| 21–30      | Indigo Tint | #5B8DEF  | .lotto-range-3     |
+| 31–40      | Slate Gray  | #B3C1D1  | .lotto-range-4     |
+| 41–45      | Mint Green  | #A9E3D2  | .lotto-range-5     |
+| Bonus Ball | Toss Pink   | #FF4D94  | .lotto-bonus-ball  |
+*/
+.lotto-range-1 { background: #D0E7FF !important; color: #23405a !important; border-color: #D0E7FF !important; }
+.lotto-range-2 { background: #0064FF !important; color: #fff !important; border-color: #0064FF !important; }
+.lotto-range-3 { background: #5B8DEF !important; color: #fff !important; border-color: #5B8DEF !important; }
+.lotto-range-4 { background: #B3C1D1 !important; color: #3a4652 !important; border-color: #B3C1D1 !important; }
+.lotto-range-5 { background: #A9E3D2 !important; color: #22695a !important; border-color: #A9E3D2 !important; }
+.lotto-bonus-ball { background: #FF4D94 !important; color: #fff !important; border-color: #FF4D94 !important; }
+.lotto-miss-ball {
+  background: #f3f4f6 !important;
+  color: #b0b4bb !important;
+  border-color: #e5e7eb !important;
+  opacity: 0.7;
+}
+
+.locked-ball {
+  border-width: 4px !important;
+  border-color: #0064FF !important;
+  box-shadow: 0 0 0 2px #b3d8fa44;
 }

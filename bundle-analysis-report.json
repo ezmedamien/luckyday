@@ -1,0 +1,36 @@
+{
+  "timestamp": "2025-07-06T07:20:24.543Z",
+  "dependencies": 18,
+  "categories": {
+    "React & Next.js": [
+      "react",
+      "react-dom",
+      "next"
+    ],
+    "Styling": [
+      "tailwindcss",
+      "clsx",
+      "tailwind-merge"
+    ],
+    "Development": [
+      "typescript",
+      "eslint",
+      "@types/node",
+      "@types/react",
+      "@types/react-dom"
+    ],
+    "Build Tools": [
+      "webpack-bundle-analyzer",
+      "@svgr/webpack",
+      "url-loader",
+      "file-loader"
+    ]
+  },
+  "recommendations": [
+    "Implement lazy loading for advanced methods",
+    "Add service worker for caching",
+    "Optimize API responses",
+    "Use React.memo for expensive components",
+    "Implement virtual scrolling for large lists"
+  ]
+}
