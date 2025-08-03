@@ -1,45 +1,28 @@
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabase';
 
-export async function GET(request: Request) {
-  const requestUrl = new URL(request.url);
-  const code = requestUrl.searchParams.get('code');
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const code = searchParams.get('code');
+  const next = searchParams.get('next') ?? '/';
 
   if (code) {
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-          set(name: string, value: string, options: any) {
-            try {
-              cookieStore.set({ name, value, ...options });
-            } catch (error) {
-              // The `set` method was called from a Server Component.
-              // This can be ignored if you have middleware refreshing
-              // user sessions.
-            }
-          },
-          remove(name: string, options: any) {
-            try {
-              cookieStore.set({ name, value: '', ...options });
-            } catch (error) {
-              // The `delete` method was called from a Server Component.
-              // This can be ignored if you have middleware refreshing
-              // user sessions.
-            }
-          },
-        },
+    try {
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+      
+      if (error) {
+        console.error('Auth callback error:', error);
+        return NextResponse.redirect(new URL('/?error=auth_callback_failed', request.url));
       }
-    );
-    await supabase.auth.exchangeCodeForSession(code);
+
+      if (data.session) {
+        return NextResponse.redirect(new URL(next, request.url));
+      }
+    } catch (error) {
+      console.error('Unexpected error in auth callback:', error);
+      return NextResponse.redirect(new URL('/?error=auth_callback_failed', request.url));
+    }
   }
 
-  // URL to redirect to after sign in process completes
-  return NextResponse.redirect(requestUrl.origin);
+  return NextResponse.redirect(new URL('/?error=no_code', request.url));
 } 

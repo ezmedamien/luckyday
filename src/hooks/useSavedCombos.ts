@@ -1,122 +1,103 @@
+"use client";
+
 import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { getSavedCombos, saveCombo, deleteSavedCombo, updateSavedCombo } from '@/lib/savedCombos';
-import { SavedCombo } from '@/lib/supabase';
+
+interface SavedCombo {
+  id: string;
+  numbers: number[];
+  saved_at: string;
+  method: string;
+  description?: string;
+}
 
 export function useSavedCombos() {
   const { user } = useAuth();
   const [savedCombos, setSavedCombos] = useState<SavedCombo[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Load saved combinations when user changes
-  useEffect(() => {
-    if (user) {
-      loadSavedCombos();
-    } else {
-      setSavedCombos([]);
-    }
-  }, [user]);
+  const [loading, setLoading] = useState(true);
 
   const loadSavedCombos = useCallback(async () => {
-    if (!user) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const { data, error } = await getSavedCombos(user.id);
-      
-      if (error) {
-        setError(error.message);
-      } else {
-        setSavedCombos(data || []);
-      }
-    } catch (err) {
-      setError('저장된 번호를 불러오는 중 오류가 발생했습니다.');
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
-
-  const addSavedCombo = useCallback(async (numbers: number[], method: string, description?: string) => {
     if (!user) {
-      console.log('No user found, cannot save combo');
+      setSavedCombos([]);
+      setLoading(false);
       return;
     }
 
-    console.log('Attempting to save combo:', { numbers, method, description, userId: user.id });
-    setLoading(true);
-    setError(null);
-
     try {
-      const { error } = await saveCombo(user.id, numbers, method, description);
-      
+      const { data, error } = await supabase
+        .from('saved_combos')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('saved_at', { ascending: false });
+
       if (error) {
-        console.error('Error saving combo:', error);
-        setError(error.message);
-      } else {
-        console.log('Combo saved successfully, reloading list...');
-        // Reload the list to get the new item with its ID
-        await loadSavedCombos();
+        console.error('Error loading saved combinations:', error);
+        return;
       }
-    } catch (err) {
-      console.error('Exception while saving combo:', err);
-      setError('번호를 저장하는 중 오류가 발생했습니다.');
+
+      setSavedCombos(data || []);
+    } catch (error) {
+      console.error('Unexpected error loading saved combinations:', error);
     } finally {
       setLoading(false);
     }
-  }, [user, loadSavedCombos]);
+  }, [user]);
+
+  useEffect(() => {
+    loadSavedCombos();
+  }, [loadSavedCombos]);
+
+  const addSavedCombo = useCallback(async (numbers: number[], method: string, description?: string) => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('saved_combos')
+        .insert([
+          {
+            user_id: user.id,
+            numbers,
+            method,
+            description,
+          },
+        ])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error saving combination:', error);
+        return;
+      }
+
+      setSavedCombos(prev => [data, ...prev]);
+    } catch (error) {
+      console.error('Unexpected error saving combination:', error);
+    }
+  }, [user]);
 
   const removeSavedCombo = useCallback(async (id: string) => {
-    setLoading(true);
-    setError(null);
-
     try {
-      const { error } = await deleteSavedCombo(id);
-      
-      if (error) {
-        setError(error.message);
-      } else {
-        setSavedCombos(prev => prev.filter(combo => combo.id !== id));
-      }
-    } catch (err) {
-      setError('번호를 삭제하는 중 오류가 발생했습니다.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      const { error } = await supabase
+        .from('saved_combos')
+        .delete()
+        .eq('id', id);
 
-  const updateCombo = useCallback(async (id: string, updates: Partial<SavedCombo>) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const { error } = await updateSavedCombo(id, updates);
-      
       if (error) {
-        setError(error.message);
-      } else {
-        setSavedCombos(prev => 
-          prev.map(combo => 
-            combo.id === id ? { ...combo, ...updates } : combo
-          )
-        );
+        console.error('Error removing saved combination:', error);
+        return;
       }
-    } catch (err) {
-      setError('번호를 업데이트하는 중 오류가 발생했습니다.');
-    } finally {
-      setLoading(false);
+
+      setSavedCombos(prev => prev.filter(combo => combo.id !== id));
+    } catch (error) {
+      console.error('Unexpected error removing saved combination:', error);
     }
   }, []);
 
   return {
     savedCombos,
-    loading,
-    error,
     addSavedCombo,
     removeSavedCombo,
-    updateCombo,
-    refresh: loadSavedCombos
+    loading,
   };
 } 

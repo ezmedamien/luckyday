@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import NumberBall from '@/components/ui/NumberBall';
 import SmartBlendPanel from '@/components/SmartBlendPanel';
 import { useLottoHistory } from '@/hooks/useLottoHistory';
@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import AuthModal from '@/components/auth/AuthModal';
 import UserMenu from '@/components/auth/UserMenu';
 import { useSavedCombos } from '@/hooks/useSavedCombos';
-import { SavedCombo } from '@/lib/supabase';
+
 import { GENERATOR_METHODS, ZODIAC_LIST, YEAR_LIST, MONTH_LIST, DAY_LIST, LOTTO_CONFIG } from '@/lib/constants';
 import { 
   generateRandomNumbers, 
@@ -43,7 +43,7 @@ export default function Home() {
     progressPercent,
     generateSmartBlend
   } = useSmartBlend();
-  const { savedCombos, addSavedCombo, removeSavedCombo, loading: savedLoading } = useSavedCombos();
+  const { savedCombos, addSavedCombo, removeSavedCombo } = useSavedCombos();
 
   const [currentTicketNumbers, setCurrentTicketNumbers] = useState<number[]>([]);
   const [searchRound, setSearchRound] = useState("");
@@ -888,7 +888,7 @@ export default function Home() {
             <span className="text-gray-300 mt-8">아직 저장된 번호가 없습니다.</span>
           ) : (
             <div style={{ width: '100%', maxHeight: '270px', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
-              {savedCombos.map((combo, idx) => {
+                              {savedCombos.map((combo) => {
                 // Use the selected historical round (filtered) instead of latest
                 const selectedDraw = filtered || (history.length > 0 ? history.reduce((a, b) => (a.round > b.round ? a : b)) : null);
                 const rank = getLottoRank({ numbers: combo.numbers }, selectedDraw);

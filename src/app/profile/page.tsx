@@ -27,7 +27,7 @@ export default function ProfilePage() {
       }
       fetchSavedCombos();
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, fetchSavedCombos]);
 
   const fetchSavedCombos = async () => {
     try {
