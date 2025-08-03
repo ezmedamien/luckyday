@@ -1,7 +1,20 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import NumberBall from '@/components/ui/NumberBall';
-import { generateSmartBlend as generateSmartBlendCore } from 'packages/core/generateSmartBlend';
+import SmartBlendPanel from '@/components/SmartBlendPanel';
+import TicketCard from '@/components/TicketCard';
+import { useLottoHistory } from '@/hooks/useLottoHistory';
+import { useSmartBlend } from '@/hooks/useSmartBlend';
+import { GENERATOR_METHODS, ZODIAC_LIST, YEAR_LIST, MONTH_LIST, DAY_LIST, LOTTO_CONFIG } from '@/lib/constants';
+import { 
+  generateRandomNumbers, 
+  generateFrequencyBased, 
+  generateHotColdBalance, 
+  generateSumRange, 
+  generateCoOccurrence, 
+  generatePersonalized, 
+  generateSemiAutomatic 
+} from '@/lib/generators';
 
 interface LottoHistoryDraw {
   round: number;
@@ -10,328 +23,167 @@ interface LottoHistoryDraw {
   bonus: number;
 }
 
+interface SavedCombo {
+  numbers: number[];
+  savedAt: string; // ISO string for serialization
+}
+
 export default function Home() {
-  const [numbers, setNumbers] = useState<number[]>([]);
-  const [history, setHistory] = useState<LottoHistoryDraw[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const { history, loading, error, latestDraw } = useLottoHistory();
+  const {
+    riskLevel,
+    setRiskLevel,
+    smartBlendResults,
+    highlightedIndex,
+    setHighlightedIndex,
+    isGenerating,
+    progressPhase,
+    progressPercent,
+    generateSmartBlend
+  } = useSmartBlend();
+
+  const [currentTicketNumbers, setCurrentTicketNumbers] = useState<number[]>([]);
   const [searchRound, setSearchRound] = useState("");
   const [filtered, setFiltered] = useState<LottoHistoryDraw | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const [savedCombos, setSavedCombos] = useState<{numbers: number[], savedAt: Date}[]>([]);
+  const [savedCombos, setSavedCombos] = useState<SavedCombo[]>([]);
   const [tooltipIdx, setTooltipIdx] = useState<number | null>(null);
   const tooltipTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [lockedNumbers, setLockedNumbers] = useState<(number | '')[]>(['', '', '', '', '', '']);
+  const [selectedMethod, setSelectedMethod] = useState('random');
 
-  // Fetch lotto history on mount
-  useEffect(() => {
-    setLoading(true);
-    fetch("/api/lotto")
-      .then((res) => res.json())
-      .then((data) => {
-        setHistory(data.draws);
-        setLoading(false);
-      })
-      .catch(() => {
-        setError("로또 데이터를 불러올 수 없습니다.");
-        setLoading(false);
-      });
-  }, []);
+  // Personalized method state
+  const [personalType, setPersonalType] = useState<'zodiac' | 'birthdate'>('zodiac');
+  const [zodiac, setZodiac] = useState('');
+  const [birthYear, setBirthYear] = useState('');
+  const [birthMonth, setBirthMonth] = useState('');
+  const [birthDay, setBirthDay] = useState('');
+
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Memoized derived values
+  const last100 = useMemo(() => history.slice(-LOTTO_CONFIG.LOOKBACK_WINDOW), [history]);
+  
+  const filteredRounds = useMemo(() => {
+    if (!searchRound) {
+      return history.slice().sort((a, b) => b.round - a.round);
+    }
+    return history
+      .filter(d => d.round.toString().includes(searchRound))
+      .sort((a, b) => b.round - a.round);
+  }, [history, searchRound]);
 
   // Search handler
-  const handleSearch = () => {
+  const handleSearch = useCallback(() => {
     if (!searchRound) {
       setFiltered(null);
       return;
     }
     const result = history.find((d) => d.round === Number(searchRound));
     setFiltered(result || null);
-  };
+  }, [searchRound, history]);
 
   // Allow Enter key to trigger search
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       handleSearch();
     }
-  };
+  }, [handleSearch]);
 
   // Zodiac and birthday options
-  const zodiacList = [
-    '쥐', '소', '호랑이', '토끼', '용', '뱀', '말', '양', '원숭이', '닭', '개', '돼지'
-  ];
-  const yearList = Array.from({ length: 100 }, (_, i) => 2025 - i); // 1925~2025
-  const [zodiac, setZodiac] = useState('');
-  const [birthYear, setBirthYear] = useState('');
-
-  // Personalized method state
-  const [personalType, setPersonalType] = useState<'zodiac' | 'birthdate'>('zodiac');
-  const [birthMonth, setBirthMonth] = useState('');
-  const [birthDay, setBirthDay] = useState('');
-  const monthList = Array.from({ length: 12 }, (_, i) => i + 1);
-  const dayList = Array.from({ length: 31 }, (_, i) => i + 1);
+  const zodiacList = ZODIAC_LIST;
+  const yearList = YEAR_LIST;
+  const monthList = MONTH_LIST;
+  const dayList = DAY_LIST;
 
   // Add personalized method to generatorMethods
-  const generatorMethods = [
-    {
-      id: 'random',
-      label: '랜덤',
-      description: '1~45 중 6개를 무작위로 선택합니다.'
-    },
-    {
-      id: 'frequency',
-      label: '빈도 가중',
-      description: '최근 100회차에서 자주 나온 번호일수록 더 잘 뽑힙니다.'
-    },
-    {
-      id: 'hotcold',
-      label: '핫-콜드 밸런스',
-      description: '최근 100회차에서 가장 많이/적게 나온 번호 3개씩 조합.'
-    },
-    {
-      id: 'sumrange',
-      label: '합계 범위',
-      description: '6개 합이 100~170 사이가 될 때까지 생성합니다.'
-    },
-    {
-      id: 'cooccur',
-      label: '동시출현',
-      description: '최근 100회차에서 자주 같이 나온 2~3개 번호로 시작.'
-    },
-    {
-      id: 'personal',
-      label: '오늘의 맞춤번호',
-      description: '띠 또는 생년월일로 오늘의 고정된 행운 번호를 생성합니다.'
-    },
-    {
-      id: 'semi',
-      label: '반자동',
-      description: '직접 고른 번호와 나머지는 랜덤으로 조합합니다.'
-    },
-    {
-      id: 'smartblend',
-      label: '스마트 블렌드',
-      description: 'AI가 추천하는 최적 번호 조합'
-    },
-  ];
-  const [selectedMethod, setSelectedMethod] = useState('random');
-
-  // Smart Blend UI state - Enhanced
-  const [riskLevel, setRiskLevel] = useState<number>(1); // 0=Safe, 1=Balanced, 2=Aggressive
-  const [smartBlendResults, setSmartBlendResults] = useState<{ ticket: number[], explain: string }[]>([]);
-  const [highlightedIndex, setHighlightedIndex] = useState<number>(0); // Primary ticket index
-  const [isGenerating, setIsGenerating] = useState<boolean>(false);
-  const [progressPhase, setProgressPhase] = useState<string>('');
-  const [progressPercent, setProgressPercent] = useState<number>(0);
-  
-  function generateSmartBlend() {
-    return generateSmartBlendCore(history.map(d => d.numbers), riskLevel);
-  }
-
-  // Helper: get last 100 draws
-  const last100 = history.slice(-100);
-
-  // Generator functions
-  function generateRandom() {
-    const nums = new Set<number>();
-    while (nums.size < 6) nums.add(Math.floor(Math.random() * 45) + 1);
-    return Array.from(nums).sort((a, b) => a - b);
-  }
-
-  function generateFrequency() {
-    // Count frequency
-    const freq = Array(46).fill(0);
-    last100.forEach(draw => {
-      draw.numbers.forEach(n => freq[n]++);
-    });
-    // Weighted random
-    const pool: number[] = [];
-    for (let n = 1; n <= 45; n++) {
-      for (let i = 0; i < freq[n]; i++) pool.push(n);
-    }
-    const nums = new Set<number>();
-    while (nums.size < 6 && pool.length > 0) {
-      const pick = pool[Math.floor(Math.random() * pool.length)];
-      nums.add(pick);
-    }
-    // Fallback to random if not enough
-    while (nums.size < 6) nums.add(Math.floor(Math.random() * 45) + 1);
-    return Array.from(nums).sort((a, b) => a - b);
-  }
-
-  function generateHotCold() {
-    // Count frequency
-    const freq = Array(46).fill(0);
-    last100.forEach(draw => {
-      draw.numbers.forEach(n => freq[n]++);
-    });
-    // Find 3 hottest and 3 coldest from the original array
-    const numsWithFreq = Array.from({ length: 45 }, (_, i) => ({ n: i + 1, f: freq[i + 1] }));
-    // Copy and sort for hot/cold selection
-    const hot = [...numsWithFreq].sort((a, b) => b.f - a.f).slice(0, 3).map(x => x.n);
-    const cold = [...numsWithFreq].sort((a, b) => a.f - b.f).slice(0, 3).map(x => x.n);
-    const combo = [...hot, ...cold];
-    // Shuffle
-    for (let i = combo.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [combo[i], combo[j]] = [combo[j], combo[i]];
-    }
-    return combo;
-  }
-
-  function generateSumRange() {
-    for (let tries = 0; tries < 50; tries++) {
-      const nums = generateRandom();
-      const sum = nums.reduce((a, b) => a + b, 0);
-      if (sum >= 100 && sum <= 170) return nums;
-    }
-    return generateRandom();
-  }
-
-  function generateCooccur() {
-    // Count all pairs
-    const pairCount: Record<string, number> = {};
-    last100.forEach(draw => {
-      const nums = draw.numbers;
-      for (let i = 0; i < nums.length; i++) {
-        for (let j = i + 1; j < nums.length; j++) {
-          const key = [nums[i], nums[j]].sort((a, b) => a - b).join('-');
-          pairCount[key] = (pairCount[key] || 0) + 1;
-        }
-      }
-    });
-    // Find top pair
-    const sortedPairs = Object.entries(pairCount) as [string, number][];
-    const topPair: number[] = sortedPairs.length > 0 ? sortedPairs.sort((a, b) => b[1] - a[1])[0][0].split('-').map(Number) : [];
-    // Fill rest randomly
-    const nums = new Set<number>(topPair);
-    while (nums.size < 6) nums.add(Math.floor(Math.random() * 45) + 1);
-    return Array.from(nums).sort((a, b) => a - b);
-  }
-
-  // Seeded random for zodiac/birthday (same result for same input per day)
-  function seededRandom(seed: string) {
-    let h = 2166136261 >>> 0;
-    for (let i = 0; i < seed.length; i++) {
-      h ^= seed.charCodeAt(i);
-      h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
-    }
-    return () => {
-      h += h << 13; h ^= h >>> 7;
-      h += h << 3; h ^= h >>> 17;
-      h += h << 5;
-      return ((h >>> 0) % 100000) / 100000;
-    };
-  }
-
-  function generatePersonalized() {
-    let seed = '';
-    if (personalType === 'zodiac' && zodiac) {
-      const now = new Date();
-      const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-      const dateStr = kst.toISOString().slice(0, 10);
-      seed = `zodiac-${zodiac}-${dateStr}`;
-    } else if (personalType === 'birthdate' && birthYear && birthMonth && birthDay) {
-      const now = new Date();
-      const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-      const dateStr = kst.toISOString().slice(0, 10);
-      seed = `birthdate-${birthYear}-${birthMonth}-${birthDay}-${dateStr}`;
-    }
-    if (!seed) return [];
-    const rand = seededRandom(seed);
-    const nums = new Set<number>();
-    while (nums.size < 6) {
-      nums.add(Math.floor(rand() * 45) + 1);
-    }
-    return Array.from(nums).sort((a, b) => a - b);
-  }
+  const generatorMethods = GENERATOR_METHODS;
 
   // Main generator switch
-  function handleGenerate() {
+  const handleGenerate = useCallback(async () => {
     if (selectedMethod === 'smartblend') {
-      setIsGenerating(true);
-      setProgressPhase('번호 생성 중...');
-      setProgressPercent(20);
-      setSmartBlendResults([]); // Clear previous results
-      setHighlightedIndex(0); // Reset highlighted index
-      
-      // Simulate progress phases
-      setTimeout(() => {
-        setProgressPhase('당첨 이력 확인 중...');
-        setProgressPercent(40);
-        setTimeout(() => {
-          setProgressPhase('통계 분석 중...');
-          setProgressPercent(60);
-          setTimeout(() => {
-            setProgressPhase('최적 조합 선별 중...');
-            setProgressPercent(80);
-            setTimeout(() => {
-              const results = generateSmartBlend();
-              setSmartBlendResults(results);
-              setNumbers(results[0]?.ticket || []); // Set primary ticket
-              setIsGenerating(false);
-              setProgressPhase('완료!');
-              setProgressPercent(100);
-              setTimeout(() => setProgressPhase(''), 1000);
-            }, 300);
-          }, 300);
-        }, 300);
-      }, 300);
+      await generateSmartBlend(history);
+      if (smartBlendResults.length > 0) {
+        setCurrentTicketNumbers(smartBlendResults[highlightedIndex]?.ticket || []);
+      }
       return;
     }
-    if (selectedMethod === 'semi') {
-      // 반자동: Fill in locked numbers, generate the rest randomly
-      const locked = lockedNumbers.map(v => (v === '' ? '' : Number(v)));
-      const used = new Set<number>(locked.filter(n => n !== '') as number[]);
-      const fillCount = locked.filter(n => n === '').length;
-      const generated: number[] = [];
-      function fillWithNoDupes() {
-        const pool = generateRandom().filter(n => !used.has(n));
-        let idx = 0;
-        while (generated.length < fillCount && idx < pool.length) {
-          if (!used.has(pool[idx])) {
-            generated.push(pool[idx]);
-            used.add(pool[idx]);
-          }
-          idx++;
-        }
-        while (generated.length < fillCount) {
-          const n = Math.floor(Math.random() * 45) + 1;
-          if (!used.has(n)) {
-            generated.push(n);
-            used.add(n);
-          }
-        }
-      }
-      fillWithNoDupes();
-      const result: number[] = [];
-      let genIdx = 0;
-      for (let i = 0; i < 6; i++) {
-        if (locked[i] !== '') result.push(Number(locked[i]));
-        else result.push(generated[genIdx++]);
-      }
-      setNumbers(result);
-    } else {
-      // Other methods: ignore lockedNumbers
-      let result: number[] = [];
-      if (selectedMethod === 'random') result = generateRandom();
-      else if (selectedMethod === 'frequency') result = generateFrequency();
-      else if (selectedMethod === 'hotcold') result = generateHotCold();
-      else if (selectedMethod === 'sumrange') result = generateSumRange();
-      else if (selectedMethod === 'cooccur') result = generateCooccur();
-      else if (selectedMethod === 'personal') result = generatePersonalized();
-      setNumbers(result);
+
+    let result: number[] = [];
+    
+    switch (selectedMethod) {
+      case 'random':
+        result = generateRandomNumbers();
+        break;
+      case 'frequency':
+        result = generateFrequencyBased(last100);
+        break;
+      case 'hotcold':
+        result = generateHotColdBalance(last100);
+        break;
+      case 'sumrange':
+        result = generateSumRange();
+        break;
+      case 'cooccur':
+        result = generateCoOccurrence(last100);
+        break;
+      case 'personal':
+        result = generatePersonalized(personalType, zodiac, birthYear, birthMonth, birthDay);
+        break;
+      case 'semi':
+        result = generateSemiAutomatic(lockedNumbers);
+        break;
+      default:
+        result = generateRandomNumbers();
     }
-  }
+    
+    setCurrentTicketNumbers(result);
+  }, [
+    selectedMethod, 
+    history, 
+    last100, 
+    personalType, 
+    zodiac, 
+    birthYear, 
+    birthMonth, 
+    birthDay, 
+    lockedNumbers,
+    generateSmartBlend,
+    smartBlendResults,
+    highlightedIndex
+  ]);
 
-  // Pick the latest draw (highest round number)
-  const latestDraw = history.length > 0 ? history.reduce((a, b) => (a.round > b.round ? a : b)) : null;
+  // Handle SmartBlend ticket selection
+  const handleTicketSelect = useCallback((index: number) => {
+    setHighlightedIndex(index);
+    setCurrentTicketNumbers(smartBlendResults[index]?.ticket || []);
+  }, [smartBlendResults, setHighlightedIndex]);
 
-  // Get all available rounds for dropdown (sorted descending)
-  const filteredRounds = searchRound
-    ? history.filter(d => d.round.toString().includes(searchRound)).sort((a, b) => b.round - a.round)
-    : history.slice().sort((a, b) => b.round - a.round);
+  // Copy ticket numbers
+  const handleCopyTicket = useCallback((ticket: number[]) => {
+    const numbers = ticket.join(' ');
+    navigator.clipboard.writeText(numbers);
+    // Could add toast notification here
+  }, []);
+
+  // Save ticket
+  const handleSaveTicket = useCallback((ticket: number[]) => {
+    const newCombo: SavedCombo = {
+      numbers: ticket,
+      savedAt: new Date().toISOString()
+    };
+    setSavedCombos(prev => [newCombo, ...prev]);
+  }, []);
+
+  // Check if generate button should be disabled
+  const isGenerateDisabled = useMemo(() => {
+    if (selectedMethod === 'personal') {
+      return (personalType === 'zodiac' && !zodiac) ||
+             (personalType === 'birthdate' && (!birthYear || !birthMonth || !birthDay));
+    }
+    return false;
+  }, [selectedMethod, personalType, zodiac, birthYear, birthMonth, birthDay]);
 
   // Handle click outside to close dropdown
   useEffect(() => {
@@ -355,7 +207,7 @@ export default function Home() {
     };
   }, [showDropdown]);
 
-  function getLottoRank(combo: { numbers: number[], savedAt: Date }, latestDraw: LottoHistoryDraw | null) {
+  function getLottoRank(combo: SavedCombo, latestDraw: LottoHistoryDraw | null) {
     if (!latestDraw) return null;
     const mainSet = new Set(latestDraw.numbers);
     const bonus = latestDraw.bonus;
@@ -453,7 +305,7 @@ export default function Home() {
         <h2 className="generator-title flex items-center gap-2" style={{ fontSize: '2rem' }}>
           <span role="img" aria-label="sparkles">✨</span> 오늘의 행운 번호
         </h2>
-        {numbers.length > 0 ? (
+        {currentTicketNumbers.length > 0 ? (
           <div
             className="number-balls-row mt-8 mb-8 justify-center flex-nowrap items-center"
             style={{
@@ -463,8 +315,8 @@ export default function Home() {
               marginTop: selectedMethod === 'semi' ? 0 : '1.2rem',
             }}
           >
-            {numbers.map((n) => (
-              <NumberBall key={n} number={n} variant="main" className={selectedMethod === 'semi' && lockedNumbers[numbers.indexOf(n)] === n ? 'locked-ball number-ball-lg' : 'number-ball-lg'} />
+            {currentTicketNumbers.map((n) => (
+              <NumberBall key={n} number={n} variant="main" className={selectedMethod === 'semi' && lockedNumbers[currentTicketNumbers.indexOf(n)] === n ? 'locked-ball number-ball-lg' : 'number-ball-lg'} />
             ))}
           </div>
         ) : (
@@ -666,75 +518,21 @@ export default function Home() {
           </div>
         )}
         {selectedMethod === 'smartblend' && (
-          <div className="smart-blend-panel">
-            {/* Risk Strategy Selection */}
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold mb-4 text-gray-800">전략 선택</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {[
-                  { value: 0, label: '💎 안심 전략', desc: '최근 100회 기준 5등 이상 이력 필수', color: 'bg-green-50 border-green-200' },
-                  { value: 1, label: '🎯 균형 전략', desc: '최근 50회 기준 5등 이상 이력 필수', color: 'bg-blue-50 border-blue-200' },
-                  { value: 2, label: '🔥 공격 전략', desc: '과거 이력 조건 없이 다양성과 엔트로피 우선', color: 'bg-orange-50 border-orange-200' }
-                ].map((strategy) => (
-                  <button
-                    key={strategy.value}
-                    onClick={() => setRiskLevel(strategy.value)}
-                    className={`p-4 rounded-xl border-2 transition-all duration-200 ${
-                      riskLevel === strategy.value 
-                        ? `${strategy.color} border-blue-500 shadow-lg scale-105` 
-                        : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-md'
-                    }`}
-                    aria-label={`${strategy.label} 선택`}
-                  >
-                    <div className="text-lg font-semibold mb-1">{strategy.label}</div>
-                    <div className="text-sm text-gray-600">{strategy.desc}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Progress Feedback */}
-            {isGenerating && (
-              <div className="mb-6 p-4 bg-blue-50 rounded-xl border border-blue-200">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-blue-800 font-medium">{progressPhase}</span>
-                  <span className="text-blue-600 text-sm">{progressPercent}%</span>
-                </div>
-                <div className="w-full bg-blue-200 rounded-full h-2">
-                  <div 
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${progressPercent}%` }}
-                  ></div>
-                </div>
-              </div>
-            )}
-
-            {/* Generation Button */}
-            <div className="mb-6">
-              <button
-                onClick={handleGenerate}
-                disabled={isGenerating}
-                className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all duration-200 ${
-                  isGenerating 
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                    : 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95 shadow-lg'
-                }`}
-                aria-label="5개 번호 생성하기"
-              >
-                {isGenerating ? '생성 중...' : '5개 번호 생성하기'}
-              </button>
-            </div>
-          </div>
+          <SmartBlendPanel
+            riskLevel={riskLevel}
+            setRiskLevel={setRiskLevel}
+            isGenerating={isGenerating}
+            progressPhase={progressPhase}
+            progressPercent={progressPercent}
+            onGenerate={() => handleGenerate()}
+          />
         )}
         <div className="flex gap-2 w-full max-w-xs mb-8" style={{ marginTop: '2rem', marginBottom: '2.5rem' }}>
           <button
             className="btn-primary flex-1"
             style={{ marginRight: '0.7rem' }}
             onClick={handleGenerate}
-            disabled={selectedMethod === 'personal' && (
-              (personalType === 'zodiac' && !zodiac) ||
-              (personalType === 'birthdate' && (!birthYear || !birthMonth || !birthDay))
-            )}
+            disabled={isGenerateDisabled}
           >
             <span role="img" aria-label="dice">🎲</span> 번호 생성하기
           </button>
@@ -742,11 +540,11 @@ export default function Home() {
             className="btn-secondary flex-1"
             style={{ marginLeft: '0.7rem' }}
             onClick={() => {
-              if (numbers.length > 0) {
-                setSavedCombos([{ numbers, savedAt: new Date() }, ...savedCombos]);
+              if (currentTicketNumbers.length > 0) {
+                handleSaveTicket(currentTicketNumbers);
               }
             }}
-            disabled={numbers.length === 0}
+            disabled={currentTicketNumbers.length === 0}
           >
             <span role="img" aria-label="save">💾</span> 번호 저장하기
           </button>
@@ -765,42 +563,13 @@ export default function Home() {
                   추천 1위 조합
                 </span>
               </div>
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-6 shadow-lg">
-                <div className="flex flex-wrap justify-center gap-2 mb-4">
-                  {smartBlendResults[highlightedIndex].ticket.map((num) => (
-                    <div key={num} className="w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center text-lg font-bold shadow-md">
-                      {num}
-                    </div>
-                  ))}
-                </div>
-                <div className="text-center">
-                  <p className="text-gray-700 text-sm leading-relaxed">
-                    {smartBlendResults[highlightedIndex].explain}
-                  </p>
-                </div>
-                <div className="mt-4 flex justify-center gap-2">
-                  <button
-                    onClick={() => {
-                      const numbers = smartBlendResults[highlightedIndex].ticket.join(' ');
-                      navigator.clipboard.writeText(numbers);
-                      // Could add toast notification here
-                    }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                    aria-label="번호 복사"
-                  >
-                    복사
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSavedCombos([{ numbers: smartBlendResults[highlightedIndex].ticket, savedAt: new Date() }, ...savedCombos]);
-                    }}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                    aria-label="번호 저장"
-                  >
-                    저장
-                  </button>
-                </div>
-              </div>
+              <TicketCard
+                ticket={smartBlendResults[highlightedIndex].ticket}
+                explain={smartBlendResults[highlightedIndex].explain}
+                isPrimary={true}
+                onCopy={() => handleCopyTicket(smartBlendResults[highlightedIndex].ticket)}
+                onSave={() => handleSaveTicket(smartBlendResults[highlightedIndex].ticket)}
+              />
             </div>
           )}
 
@@ -811,48 +580,14 @@ export default function Home() {
               {smartBlendResults.map((result, index) => {
                 if (index === highlightedIndex) return null; // Skip primary ticket
                 return (
-                  <div
+                  <TicketCard
                     key={index}
-                    onClick={() => {
-                      setHighlightedIndex(index);
-                      setNumbers(result.ticket);
-                    }}
-                    className="bg-white border-2 border-gray-200 rounded-xl p-4 cursor-pointer hover:border-blue-300 hover:shadow-md transition-all duration-200"
-                  >
-                    <div className="flex flex-wrap justify-center gap-1 mb-3">
-                      {result.ticket.map((num) => (
-                        <div key={num} className="w-8 h-8 bg-gray-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                          {num}
-                        </div>
-                      ))}
-                    </div>
-                    <p className="text-gray-600 text-xs leading-relaxed line-clamp-3">
-                      {result.explain}
-                    </p>
-                    <div className="mt-3 flex justify-between items-center">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const numbers = result.ticket.join(' ');
-                          navigator.clipboard.writeText(numbers);
-                        }}
-                        className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors"
-                        aria-label="번호 복사"
-                      >
-                        복사
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSavedCombos([{ numbers: result.ticket, savedAt: new Date() }, ...savedCombos]);
-                        }}
-                        className="text-xs px-2 py-1 bg-green-100 text-green-600 rounded hover:bg-green-200 transition-colors"
-                        aria-label="번호 저장"
-                      >
-                        저장
-                      </button>
-                    </div>
-                  </div>
+                    ticket={result.ticket}
+                    explain={result.explain}
+                    onClick={() => handleTicketSelect(index)}
+                    onCopy={() => handleCopyTicket(result.ticket)}
+                    onSave={() => handleSaveTicket(result.ticket)}
+                  />
                 );
               })}
             </div>
@@ -1027,7 +762,7 @@ export default function Home() {
                 const bonus = latest ? latest.bonus : null;
                 const rank = getLottoRank(combo, latest);
                 return (
-                  <div key={combo.savedAt.getTime() + '-' + combo.numbers.join('-')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.2rem', padding: '0.2rem 0.1rem', borderBottom: '1px solid #f1f5f9', minHeight: '2.6rem' }}>
+                  <div key={combo.savedAt + '-' + combo.numbers.join('-')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.2rem', padding: '0.2rem 0.1rem', borderBottom: '1px solid #f1f5f9', minHeight: '2.6rem' }}>
                     <div className="number-balls-row flex-nowrap" style={{ fontSize: '1.15rem', gap: '0.18rem', flexWrap: 'nowrap' }}>
                       {combo.numbers.map((n: number, i: number) => {
                         const isMatch = mainSet.has(n);
