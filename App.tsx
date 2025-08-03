@@ -86,10 +86,11 @@ export default function App() {
     
     // Try different URLs for the API endpoint
     const apiUrls = [
-      'http://localhost:3000/api/lotto',
-      'http://172.29.96.241:3000/api/lotto', // Updated to your network IP
+      'https://luckyday-42vznxk88-ezmedamiens-projects.vercel.app/api/lotto', // Vercel production API
+      'http://localhost:3000/api/lotto', // Local dev
+      'http://172.29.96.241:3000/api/lotto', // Local network dev
       'http://10.0.2.2:3000/api/lotto', // Android emulator
-      'http://127.0.0.1:3000/api/lotto',
+      'http://127.0.0.1:3000/api/lotto', // Localhost fallback
     ];
     
     const tryFetch = async (url: string) => {
@@ -98,6 +99,7 @@ export default function App() {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
+            'User-Agent': 'ExpoApp'
           },
         });
         

@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import NumberBall from '@/components/ui/NumberBall';
+import { smartBlend } from 'packages/core/smartBlend';
 
 interface LottoHistoryDraw {
   round: number;
@@ -108,8 +109,35 @@ export default function Home() {
       label: '반자동',
       description: '직접 고른 번호와 나머지는 랜덤으로 조합합니다.'
     },
+    {
+      id: 'smartblend',
+      label: '스마트 블렌드',
+      description: 'AI가 추천하는 최적 번호 조합'
+    },
   ];
   const [selectedMethod, setSelectedMethod] = useState('random');
+
+  // Smart Blend UI state - Simplified
+  const [smartBlendMode, setSmartBlendMode] = useState<'balanced' | 'aggressive' | 'conservative'>('balanced');
+  const [luckyNumber, setLuckyNumber] = useState<number>(() => {
+    const saved = typeof window !== 'undefined' && localStorage.getItem('luckyNumber');
+    return saved ? Number(saved) : 0; // 0 means no lucky number
+  });
+  
+  useEffect(() => {
+    if (typeof window !== 'undefined') localStorage.setItem('luckyNumber', String(luckyNumber));
+  }, [luckyNumber]);
+
+  function generateSmartBlend() {
+    // Convert mode to weights
+    const weightPresets = {
+      balanced: [1, 1, 1, 1, 1],
+      aggressive: [1.5, 0.8, 1.2, 0.7, 1.3], // More Bayesian, less variance
+      conservative: [0.8, 1.2, 0.9, 1.3, 0.8] // More entropy, less risk
+    };
+    const weights = weightPresets[smartBlendMode];
+    return smartBlend(history.map(d => d.numbers), 1, luckyNumber || undefined, weights);
+  }
 
   // Helper: get last 100 draws
   const last100 = history.slice(-100);
@@ -231,6 +259,12 @@ export default function Home() {
 
   // Main generator switch
   function handleGenerate() {
+    if (selectedMethod === 'smartblend') {
+      const results = generateSmartBlend();
+      setNumbers(results[0]?.ticket || []);
+      setSmartBlendResult(results[0]); // Store just the first result
+      return;
+    }
     if (selectedMethod === 'semi') {
       // 반자동: Fill in locked numbers, generate the rest randomly
       const locked = lockedNumbers.map(v => (v === '' ? '' : Number(v)));
@@ -319,6 +353,8 @@ export default function Home() {
     if (matchCount === 3) return '5등';
     return '낙첨';
   }
+
+  const [smartBlendResult, setSmartBlendResult] = useState<{ ticket: number[], explain: string } | null>(null); // Single result instead of array
 
   return (
     <div className="container-center" style={{ maxWidth: '1280px', width: '100%', margin: '0 auto' }}>
@@ -616,6 +652,49 @@ export default function Home() {
             </button>
           </div>
         )}
+        {selectedMethod === 'smartblend' && (
+          <div className="smart-blend-panel">
+            <details open>
+              <summary>Smart Blend Mode</summary>
+              <div style={{ margin: '0.5rem 0' }}>
+                <label>Mode: </label>
+                <select
+                  value={smartBlendMode}
+                  onChange={e => setSmartBlendMode(e.target.value as 'balanced' | 'aggressive' | 'conservative')}
+                >
+                  <option value="balanced">균형잡힌 (기본값)</option>
+                  <option value="aggressive">적극적 (과거 데이터 중시)</option>
+                  <option value="conservative">보수적 (다양성 중시)</option>
+                </select>
+              </div>
+              <div style={{ margin: '1rem 0' }}>
+                <label>행운 번호 (선택사항): </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={45}
+                  value={luckyNumber}
+                  onChange={e => setLuckyNumber(Math.max(0, Math.min(45, Number(e.target.value))))}
+                  placeholder="0 = 행운번호 없음"
+                  style={{ width: '120px', marginRight: '0.5rem' }}
+                />
+                <button
+                  onClick={() => setLuckyNumber(7)}
+                  style={{ 
+                    fontSize: '0.8rem', 
+                    padding: '0.2rem 0.5rem', 
+                    background: '#f0f0f0', 
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  행운번호 7
+                </button>
+              </div>
+            </details>
+          </div>
+        )}
         <div className="flex gap-2 w-full max-w-xs mb-8" style={{ marginTop: '2rem', marginBottom: '2.5rem' }}>
           <button
             className="btn-primary flex-1"
@@ -840,6 +919,17 @@ export default function Home() {
           )}
         </div>
       </div>
+      {selectedMethod === 'smartblend' && smartBlendResult && (
+        <div className="smart-blend-results">
+          <h3>AI 추천 번호</h3>
+          <div style={{ margin: '1rem 0', padding: '1rem', border: '1px solid #eee', borderRadius: '8px', background: '#f8f9fa' }}>
+            <div style={{ fontWeight: 700, fontSize: '1.2rem', color: '#2563eb' }}>{smartBlendResult.ticket.join(', ')}</div>
+            <div style={{ color: '#666', fontSize: '0.9rem', marginTop: '0.5rem' }}>
+              {smartBlendResult.explain.replace(/Smart Blend #\d+ — Score \d+ \/ 100 \(([^)]+)\)/, 'AI가 분석한 최적 조합입니다.')}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
