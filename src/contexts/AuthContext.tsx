@@ -9,10 +9,16 @@ interface AuthContextType {
   loading: boolean;
   authLoading: boolean;
   isGuest: boolean;
+  authModalOpen: boolean;
+  openAuthModal: () => void;
+  closeAuthModal: () => void;
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signUp: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
+  sendOTP: (phone: string) => Promise<{ error: AuthError | null }>;
+  verifyOTP: (phone: string, otp: string) => Promise<{ error: AuthError | null }>;
+  signInWithProvider: (provider: 'kakao' | 'naver') => Promise<{ error: AuthError | null }>;
   saveAsGuest: () => void;
 }
 
@@ -23,6 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(true);
   const [isGuest, setIsGuest] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
 
   useEffect(() => {
     // Get initial session
@@ -108,6 +115,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const sendOTP = async (phone: string) => {
+    try {
+      // For now, return success (placeholder implementation)
+      // In a real app, you would integrate with SMS service
+      console.log('Sending OTP to:', phone);
+      return { error: null };
+    } catch (error) {
+      console.error('Send OTP error:', error);
+      return { error: error as AuthError };
+    }
+  };
+
+  const verifyOTP = async (phone: string, otp: string) => {
+    try {
+      // For now, return success (placeholder implementation)
+      // In a real app, you would verify the OTP
+      console.log('Verifying OTP:', phone, otp);
+      return { error: null };
+    } catch (error) {
+      console.error('Verify OTP error:', error);
+      return { error: error as AuthError };
+    }
+  };
+
+  const signInWithProvider = async (provider: 'kakao' | 'naver') => {
+    try {
+      // For now, return success (placeholder implementation)
+      // In a real app, you would integrate with OAuth providers
+      console.log('Signing in with provider:', provider);
+      return { error: null };
+    } catch (error) {
+      console.error('Social sign in error:', error);
+      return { error: error as AuthError };
+    }
+  };
+
   const saveAsGuest = () => {
     setIsGuest(true);
     setUser({
@@ -117,15 +160,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } as User);
   };
 
+  const openAuthModal = () => {
+    setAuthModalOpen(true);
+  };
+
+  const closeAuthModal = () => {
+    setAuthModalOpen(false);
+  };
+
   const value = {
     user,
     loading,
     authLoading,
     isGuest,
+    authModalOpen,
+    openAuthModal,
+    closeAuthModal,
     signIn,
     signUp,
     signOut,
     resetPassword,
+    sendOTP,
+    verifyOTP,
+    signInWithProvider,
     saveAsGuest,
   };
 
