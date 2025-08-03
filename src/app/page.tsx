@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import AuthModal from '@/components/auth/AuthModal';
 import UserMenu from '@/components/auth/UserMenu';
 import { useSavedCombos } from '@/hooks/useSavedCombos';
-
+// Force deployment update
 import { GENERATOR_METHODS, ZODIAC_LIST, YEAR_LIST, MONTH_LIST, DAY_LIST, LOTTO_CONFIG } from '@/lib/constants';
 import { 
   generateRandomNumbers, 
