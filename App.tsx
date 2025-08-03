@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -19,13 +19,27 @@ interface LottoHistoryDraw {
   bonus: number;
 }
 
+interface SmartBlendResult {
+  ticket: number[];
+  explain: string;
+}
 
+interface SavedCombo {
+  numbers: number[];
+  savedAt: Date;
+}
 
 const { width } = Dimensions.get('window');
 
+// Constants matching web version
+const ZODIAC_LIST = ['쥐', '소', '호랑이', '토끼', '용', '뱀', '말', '양', '원숭이', '닭', '개', '돼지'];
+const YEAR_LIST = Array.from({ length: 50 }, (_, i) => (2024 - i).toString());
+const MONTH_LIST = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
+const DAY_LIST = Array.from({ length: 31 }, (_, i) => (i + 1).toString().padStart(2, '0'));
+
 export default function App() {
   const [numbers, setNumbers] = useState<number[]>([]);
-  const [savedCombos, setSavedCombos] = useState<{numbers: number[], savedAt: Date}[]>([]);
+  const [savedCombos, setSavedCombos] = useState<SavedCombo[]>([]);
   const [history, setHistory] = useState<LottoHistoryDraw[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMethod, setSelectedMethod] = useState('random');
@@ -41,7 +55,19 @@ export default function App() {
   const [birthMonth, setBirthMonth] = useState('');
   const [birthDay, setBirthDay] = useState('');
 
-  // Generator methods
+  // SmartBlend state
+  const [riskLevel, setRiskLevel] = useState<number>(1);
+  const [smartBlendResults, setSmartBlendResults] = useState<SmartBlendResult[]>([]);
+  const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [progressPhase, setProgressPhase] = useState<string>('');
+  const [progressPercent, setProgressPercent] = useState<number>(0);
+
+  // Backtest modal state
+  const [showBacktestModal, setShowBacktestModal] = useState(false);
+  const [selectedComboForBacktest, setSelectedComboForBacktest] = useState<SavedCombo | null>(null);
+
+  // Generator methods - updated to match web version
   const generatorMethods = [
     {
       id: 'random',
@@ -77,6 +103,11 @@ export default function App() {
       id: 'semi',
       label: '반자동',
       description: '직접 고른 번호와 나머지는 랜덤으로 조합합니다.'
+    },
+    {
+      id: 'smartblend',
+      label: 'AI 추첨기',
+      description: 'AI가 분석한 최적의 조합을 5개 생성합니다.'
     },
   ];
 
@@ -137,6 +168,103 @@ export default function App() {
 
   // Helper: get last 100 draws
   const last100 = history.slice(-100);
+
+  // SmartBlend generation function
+  const generateSmartBlend = useCallback(async (history: LottoHistoryDraw[]) => {
+    setIsGenerating(true);
+    setProgressPhase('번호 생성 중...');
+    setProgressPercent(20);
+    setSmartBlendResults([]);
+    setHighlightedIndex(0);
+
+    try {
+      // Simulate progress phases with real timing
+      await new Promise(resolve => setTimeout(resolve, 300));
+      setProgressPhase('당첨 이력 확인 중...');
+      setProgressPercent(40);
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+      setProgressPhase('통계 분석 중...');
+      setProgressPercent(60);
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+      setProgressPhase('최적 조합 선별 중...');
+      setProgressPercent(80);
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Generate SmartBlend results (simplified version for mobile)
+      const results: SmartBlendResult[] = [];
+      for (let i = 0; i < 5; i++) {
+        const ticket = generateSmartBlendTicket(history, riskLevel);
+        results.push({
+          ticket,
+          explain: `AI 추첨기 추천 조합 ${i + 1}`
+        });
+      }
+      
+      setSmartBlendResults(results);
+      setHighlightedIndex(0);
+      
+      setProgressPhase('완료!');
+      setProgressPercent(100);
+      
+      // Clear completion message after 1 second
+      setTimeout(() => setProgressPhase(''), 1000);
+    } catch (error) {
+      setProgressPhase('오류 발생');
+      console.error('SmartBlend generation failed:', error);
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [riskLevel]);
+
+  // SmartBlend ticket generation (simplified)
+  const generateSmartBlendTicket = (history: LottoHistoryDraw[], riskLevel: number): number[] => {
+    if (history.length === 0) {
+      return generateRandom();
+    }
+
+    const freq = Array(46).fill(0);
+    history.slice(-100).forEach(draw => {
+      draw.numbers.forEach(n => freq[n]++);
+    });
+
+    // Different strategies based on risk level
+    let pool: number[] = [];
+    
+    if (riskLevel === 0) { // Safe
+      // Use most frequent numbers
+      const sorted = Array.from({ length: 45 }, (_, i) => ({ n: i + 1, f: freq[i + 1] }))
+        .sort((a, b) => b.f - a.f)
+        .slice(0, 20)
+        .map(x => x.n);
+      pool = sorted;
+    } else if (riskLevel === 1) { // Balanced
+      // Mix of frequent and random
+      const frequent = Array.from({ length: 45 }, (_, i) => ({ n: i + 1, f: freq[i + 1] }))
+        .sort((a, b) => b.f - a.f)
+        .slice(0, 15)
+        .map(x => x.n);
+      const random = Array.from({ length: 30 }, () => Math.floor(Math.random() * 45) + 1);
+      pool = [...frequent, ...random];
+    } else { // Aggressive
+      // Use less frequent numbers
+      const sorted = Array.from({ length: 45 }, (_, i) => ({ n: i + 1, f: freq[i + 1] }))
+        .sort((a, b) => a.f - b.f)
+        .slice(0, 25)
+        .map(x => x.n);
+      pool = sorted;
+    }
+
+    const nums = new Set<number>();
+    while (nums.size < 6 && pool.length > 0) {
+      const pick = pool[Math.floor(Math.random() * pool.length)];
+      nums.add(pick);
+    }
+    while (nums.size < 6) nums.add(Math.floor(Math.random() * 45) + 1);
+    return Array.from(nums).sort((a, b) => a - b);
+  };
 
   // Generator functions
   function generateRandom() {
@@ -260,55 +388,102 @@ export default function App() {
     return Array.from(nums).sort((a, b) => a - b);
   }
 
-  function handleGenerate() {
-    if (selectedMethod === 'semi') {
-      let locked = lockedNumbers.map(v => (v === '' ? '' : Number(v)));
-      let used = new Set<number>(locked.filter(n => n !== '') as number[]);
-      let fillCount = locked.filter(n => n === '').length;
-      let generated: number[] = [];
-      
-      function fillWithNoDupes() {
-        let pool = generateRandom().filter(n => !used.has(n));
-        let idx = 0;
-        while (generated.length < fillCount && idx < pool.length) {
-          if (!used.has(pool[idx])) {
-            generated.push(pool[idx]);
-            used.add(pool[idx]);
-          }
-          idx++;
-        }
-        while (generated.length < fillCount) {
-          let n = Math.floor(Math.random() * 45) + 1;
-          if (!used.has(n)) {
-            generated.push(n);
-            used.add(n);
-          }
-        }
+  const handleGenerate = useCallback(async () => {
+    if (selectedMethod === 'smartblend') {
+      await generateSmartBlend(history);
+      if (smartBlendResults.length > 0) {
+        setNumbers(smartBlendResults[highlightedIndex]?.ticket || []);
       }
-      fillWithNoDupes();
-      let result: number[] = [];
-      let genIdx = 0;
-      for (let i = 0; i < 6; i++) {
-        if (locked[i] !== '') result.push(Number(locked[i]));
-        else result.push(generated[genIdx++]);
-      }
-      setNumbers(result);
-    } else {
-      let result: number[] = [];
-      if (selectedMethod === 'random') result = generateRandom();
-      else if (selectedMethod === 'frequency') result = generateFrequency();
-      else if (selectedMethod === 'hotcold') result = generateHotCold();
-      else if (selectedMethod === 'sumrange') result = generateSumRange();
-      else if (selectedMethod === 'cooccur') result = generateCooccur();
-      else if (selectedMethod === 'personal') result = generatePersonalized();
-      setNumbers(result);
+      return;
     }
+
+    let result: number[] = [];
+    
+    switch (selectedMethod) {
+      case 'random':
+        result = generateRandom();
+        break;
+      case 'frequency':
+        result = generateFrequency();
+        break;
+      case 'hotcold':
+        result = generateHotCold();
+        break;
+      case 'sumrange':
+        result = generateSumRange();
+        break;
+      case 'cooccur':
+        result = generateCooccur();
+        break;
+      case 'personal':
+        result = generatePersonalized();
+        break;
+      case 'semi':
+        result = generateSemiAutomatic();
+        break;
+      default:
+        result = generateRandom();
+    }
+    
+    setNumbers(result);
+  }, [
+    selectedMethod, 
+    history, 
+    last100, 
+    personalType, 
+    zodiac, 
+    birthYear, 
+    birthMonth, 
+    birthDay, 
+    lockedNumbers,
+    generateSmartBlend,
+    smartBlendResults,
+    highlightedIndex
+  ]);
+
+  function generateSemiAutomatic() {
+    let locked = lockedNumbers.map(v => (v === '' ? '' : Number(v)));
+    let used = new Set<number>(locked.filter(n => n !== '') as number[]);
+    let fillCount = locked.filter(n => n === '').length;
+    let generated: number[] = [];
+    
+    function fillWithNoDupes() {
+      let pool = generateRandom().filter(n => !used.has(n));
+      let idx = 0;
+      while (generated.length < fillCount && idx < pool.length) {
+        if (!used.has(pool[idx])) {
+          generated.push(pool[idx]);
+          used.add(pool[idx]);
+        }
+        idx++;
+      }
+      while (generated.length < fillCount) {
+        let n = Math.floor(Math.random() * 45) + 1;
+        if (!used.has(n)) {
+          generated.push(n);
+          used.add(n);
+        }
+      }
+    }
+    fillWithNoDupes();
+    let result: number[] = [];
+    let genIdx = 0;
+    for (let i = 0; i < 6; i++) {
+      if (locked[i] !== '') result.push(Number(locked[i]));
+      else result.push(generated[genIdx++]);
+    }
+    return result;
   }
+
+  // Handle SmartBlend ticket selection
+  const handleTicketSelect = useCallback((index: number) => {
+    setHighlightedIndex(index);
+    setNumbers(smartBlendResults[index]?.ticket || []);
+  }, [smartBlendResults]);
 
   const saveCombo = () => {
     if (numbers.length === 6) {
       setSavedCombos([...savedCombos, { numbers: [...numbers], savedAt: new Date() }]);
-      // Removed alert - silent save
     }
   };
 
@@ -347,18 +522,42 @@ export default function App() {
 
   const latestDraw = history.length > 0 ? history.reduce((a, b) => (a.round > b.round ? a : b)) : null;
 
-  const getLottoRank = (combo: { numbers: number[], savedAt: Date }, latestDraw: LottoHistoryDraw | null) => {
+  const getLottoRank = (combo: SavedCombo, latestDraw: LottoHistoryDraw | null) => {
     if (!latestDraw) return null;
     const mainSet = new Set(latestDraw.numbers);
     const bonus = latestDraw.bonus;
     const matchCount = combo.numbers.filter(n => mainSet.has(n)).length;
     const hasBonus = combo.numbers.includes(bonus);
+    
+
+    
     if (matchCount === 6) return '1등';
     if (matchCount === 5 && hasBonus) return '2등';
     if (matchCount === 5) return '3등';
     if (matchCount === 4) return '4등';
     if (matchCount === 3) return '5등';
     return '낙첨';
+  };
+
+  const getBacktestResults = (combo: SavedCombo) => {
+    const results = {
+      '1등': 0,
+      '2등': 0,
+      '3등': 0,
+      '4등': 0,
+      '5등': 0,
+      '낙첨': 0,
+      total: history.length
+    };
+
+    history.forEach(draw => {
+      const rank = getLottoRank(combo, draw);
+      if (rank) {
+        results[rank as keyof typeof results]++;
+      }
+    });
+
+    return results;
   };
 
   // Get available rounds for dropdown (sorted descending)
@@ -371,7 +570,7 @@ export default function App() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>🎰 LuckyDay</Text>
-        <Text style={styles.subtitle}>AI 로또 번호 생성기</Text>
+        <Text style={styles.subtitle}>AI 추첨기</Text>
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
@@ -406,6 +605,53 @@ export default function App() {
           <Text style={styles.methodDescription}>
             {generatorMethods.find(m => m.id === selectedMethod)?.description}
           </Text>
+
+          {/* SmartBlend Risk Level Selection */}
+          {selectedMethod === 'smartblend' && (
+            <View style={styles.smartBlendContainer}>
+              <Text style={styles.smartBlendTitle}>전략 선택</Text>
+              <View style={styles.riskButtonsContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.riskButton,
+                    riskLevel === 0 && styles.riskButtonActive
+                  ]}
+                  onPress={() => setRiskLevel(0)}
+                >
+                  <Text style={styles.riskButtonText}>안심</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.riskButton,
+                    riskLevel === 1 && styles.riskButtonActive
+                  ]}
+                  onPress={() => setRiskLevel(1)}
+                >
+                  <Text style={styles.riskButtonText}>균형</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.riskButton,
+                    riskLevel === 2 && styles.riskButtonActive
+                  ]}
+                  onPress={() => setRiskLevel(2)}
+                >
+                  <Text style={styles.riskButtonText}>공격</Text>
+                </TouchableOpacity>
+              </View>
+              
+              {/* Progress for SmartBlend */}
+              {isGenerating && (
+                <View style={styles.progressContainer}>
+                  <Text style={styles.progressText}>{progressPhase}</Text>
+                  <View style={styles.progressBar}>
+                    <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+                  </View>
+                  <Text style={styles.progressPercent}>{progressPercent}%</Text>
+                </View>
+              )}
+            </View>
+          )}
 
           {/* Semi-auto inputs */}
           {selectedMethod === 'semi' && (
@@ -491,8 +737,14 @@ export default function App() {
           )}
 
           <View style={styles.buttonContainer}>
-            <TouchableOpacity style={styles.generateButton} onPress={handleGenerate}>
-              <Text style={styles.buttonText}>번호 생성</Text>
+            <TouchableOpacity 
+              style={styles.generateButton} 
+              onPress={handleGenerate}
+              disabled={isGenerating}
+            >
+              <Text style={styles.buttonText}>
+                {selectedMethod === 'smartblend' ? '5개 번호 생성하기' : '번호 생성'}
+              </Text>
             </TouchableOpacity>
             
             {numbers.length > 0 && (
@@ -511,6 +763,42 @@ export default function App() {
             ))}
           </View>
         </View>
+
+        {/* SmartBlend Results */}
+        {selectedMethod === 'smartblend' && smartBlendResults.length > 0 && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>✨ AI 추첨기 추천 조합</Text>
+            {smartBlendResults.map((result, index) => (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.smartBlendResult,
+                  highlightedIndex === index && styles.smartBlendResultActive
+                ]}
+                onPress={() => handleTicketSelect(index)}
+              >
+                <View style={styles.smartBlendResultHeader}>
+                  <Text style={styles.smartBlendResultTitle}>추천 {index + 1}</Text>
+                  <TouchableOpacity
+                    style={styles.smartBlendSaveButton}
+                    onPress={() => {
+                      setSavedCombos([...savedCombos, { numbers: result.ticket, savedAt: new Date() }]);
+                    }}
+                  >
+                    <Text style={styles.smartBlendSaveButtonText}>저장</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.numbersContainer}>
+                  {result.ticket.map((num, numIndex) => (
+                    <View key={numIndex} style={[styles.ball, { backgroundColor: getBallColor(num) }]}>
+                      <Text style={[styles.ballText, { color: getBallTextColor(num) }]}>{num}</Text>
+                    </View>
+                  ))}
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         {/* Historical Search */}
         <View style={styles.card}>
@@ -608,7 +896,10 @@ export default function App() {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>저장된 조합</Text>
             {savedCombos.map((combo, index) => {
-              const rank = getLottoRank(combo, latestDraw);
+              // Use the selected historical round (filtered) instead of latest
+              const selectedDraw = filtered || latestDraw;
+              const rank = getLottoRank(combo, selectedDraw);
+
               return (
                 <View key={index} style={styles.savedCombo}>
                   <View style={styles.savedComboHeader}>
@@ -636,12 +927,23 @@ export default function App() {
                       </View>
                     ))}
                   </View>
-                  <TouchableOpacity 
-                    style={styles.deleteButton} 
-                    onPress={() => deleteCombo(index)}
-                  >
-                    <Text style={styles.deleteButtonText}>삭제</Text>
-                  </TouchableOpacity>
+                  <View style={styles.savedComboActions}>
+                    <TouchableOpacity
+                      style={styles.backtestButton}
+                      onPress={() => {
+                        setSelectedComboForBacktest(combo);
+                        setShowBacktestModal(true);
+                      }}
+                    >
+                      <Text style={styles.backtestButtonText}>백테스트</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={styles.deleteButton} 
+                      onPress={() => deleteCombo(index)}
+                    >
+                      <Text style={styles.deleteButtonText}>삭제</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               );
             })}
@@ -659,6 +961,95 @@ export default function App() {
               <Text style={styles.tooltipText}>
                 {generatorMethods.find(m => m.id === tooltipMethod)?.description}
               </Text>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Backtest Modal */}
+        <Modal
+          visible={showBacktestModal}
+          transparent={true}
+          animationType="slide"
+        >
+          <View style={styles.backtestModalOverlay}>
+            <View style={styles.backtestModal}>
+              <View style={styles.backtestModalHeader}>
+                <Text style={styles.backtestModalTitle}>📊 백테스트 결과</Text>
+                <TouchableOpacity
+                  style={styles.backtestModalCloseButton}
+                  onPress={() => setShowBacktestModal(false)}
+                >
+                  <Text style={styles.backtestModalCloseText}>×</Text>
+                </TouchableOpacity>
+              </View>
+              
+              {selectedComboForBacktest && (
+                <ScrollView style={styles.backtestModalContent}>
+                  {/* Selected combination */}
+                  <View style={styles.backtestSelectedCombo}>
+                    <Text style={styles.backtestSelectedComboTitle}>분석 대상 번호</Text>
+                    <View style={styles.numbersContainer}>
+                      {selectedComboForBacktest.numbers.map((num, i) => (
+                        <View key={i} style={[styles.ball, { backgroundColor: getBallColor(num) }]}>
+                          <Text style={[styles.ballText, { color: getBallTextColor(num) }]}>{num}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Backtest results */}
+                  {(() => {
+                    const results = getBacktestResults(selectedComboForBacktest);
+                    return (
+                      <View>
+                        <Text style={styles.backtestResultsTitle}>
+                          전체 {results.total}회차 분석 결과
+                        </Text>
+                        
+                        <View style={styles.backtestTable}>
+                          <View style={styles.backtestTableHeader}>
+                            <Text style={styles.backtestTableHeaderText}>등수</Text>
+                            <Text style={styles.backtestTableHeaderText}>회수</Text>
+                            <Text style={styles.backtestTableHeaderText}>비율</Text>
+                          </View>
+                          
+                          {(['1등', '2등', '3등', '4등', '5등'] as const).map((rank, index) => (
+                            <View key={rank} style={[
+                              styles.backtestTableRow,
+                              index % 2 === 0 && styles.backtestTableRowAlt
+                            ]}>
+                              <Text style={styles.backtestTableCell}>{rank}</Text>
+                              <Text style={styles.backtestTableCell}>{results[rank]}회</Text>
+                              <Text style={styles.backtestTableCell}>
+                                {((results[rank] / results.total) * 100).toFixed(1)}%
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+
+                        {/* Summary */}
+                        <View style={styles.backtestSummary}>
+                          <Text style={styles.backtestSummaryTitle}>📈 성과 요약</Text>
+                          <View style={styles.backtestSummaryTable}>
+                            <View style={styles.backtestSummaryRow}>
+                              <Text style={styles.backtestSummaryLabel}>총 당첨 횟수</Text>
+                              <Text style={styles.backtestSummaryValue}>
+                                {results['1등'] + results['2등'] + results['3등'] + results['4등'] + results['5등']}회
+                              </Text>
+                            </View>
+                            <View style={styles.backtestSummaryRow}>
+                              <Text style={styles.backtestSummaryLabel}>전체 당첨률</Text>
+                              <Text style={styles.backtestSummaryValue}>
+                                {(((results['1등'] + results['2등'] + results['3등'] + results['4등'] + results['5등']) / results.total) * 100).toFixed(1)}%
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })()}
+                </ScrollView>
+              )}
             </View>
           </View>
         </Modal>
@@ -1045,5 +1436,226 @@ const styles = StyleSheet.create({
     color: '#374151',
     textAlign: 'center',
     lineHeight: 22,
+  },
+  smartBlendContainer: {
+    marginBottom: 15,
+  },
+  smartBlendTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 10,
+    color: '#374151',
+  },
+  riskButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    padding: 5,
+  },
+  riskButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  riskButtonActive: {
+    backgroundColor: '#3B82F6',
+  },
+  riskButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  progressContainer: {
+    marginTop: 15,
+    padding: 10,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  progressText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 5,
+  },
+  progressBar: {
+    width: '100%',
+    height: 8,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#3B82F6',
+    borderRadius: 4,
+  },
+  progressPercent: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 5,
+  },
+  smartBlendResult: {
+    backgroundColor: '#F9FAFB',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  smartBlendResultActive: {
+    backgroundColor: '#E0E7FF',
+    borderColor: '#3B82F6',
+    borderWidth: 1,
+  },
+  smartBlendResultHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  smartBlendResultTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  smartBlendSaveButton: {
+    backgroundColor: '#10B981',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  smartBlendSaveButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  backtestModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backtestModal: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    width: '90%',
+    maxHeight: '80%',
+    elevation: 10,
+  },
+  backtestModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  backtestModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#374151',
+  },
+  backtestModalCloseButton: {
+    padding: 5,
+  },
+  backtestModalCloseText: {
+    fontSize: 24,
+    color: '#6B7280',
+  },
+  backtestModalContent: {
+    padding: 15,
+  },
+  backtestSelectedCombo: {
+    marginBottom: 15,
+  },
+  backtestSelectedComboTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 10,
+    color: '#374151',
+  },
+  backtestResultsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 10,
+    color: '#374151',
+  },
+  backtestTable: {
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  backtestTableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#F3F4F6',
+    padding: 12,
+  },
+  backtestTableHeaderText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  backtestTableRow: {
+    flexDirection: 'row',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  backtestTableRowAlt: {
+    backgroundColor: '#F9FAFB',
+  },
+  backtestTableCell: {
+    flex: 1,
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  backtestSummary: {
+    marginTop: 15,
+    padding: 15,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+  },
+  backtestSummaryTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 10,
+    color: '#374151',
+  },
+  backtestSummaryTable: {
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  backtestSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  backtestSummaryLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  backtestSummaryValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  savedComboActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  backtestButton: {
+    backgroundColor: '#3B82F6',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+  },
+  backtestButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
 }); 

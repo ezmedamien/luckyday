@@ -2,9 +2,13 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import NumberBall from '@/components/ui/NumberBall';
 import SmartBlendPanel from '@/components/SmartBlendPanel';
-import TicketCard from '@/components/TicketCard';
 import { useLottoHistory } from '@/hooks/useLottoHistory';
 import { useSmartBlend } from '@/hooks/useSmartBlend';
+import { useAuth } from '@/contexts/AuthContext';
+import AuthModal from '@/components/auth/AuthModal';
+import UserMenu from '@/components/auth/UserMenu';
+import { useSavedCombos } from '@/hooks/useSavedCombos';
+import { SavedCombo } from '@/lib/supabase';
 import { GENERATOR_METHODS, ZODIAC_LIST, YEAR_LIST, MONTH_LIST, DAY_LIST, LOTTO_CONFIG } from '@/lib/constants';
 import { 
   generateRandomNumbers, 
@@ -23,12 +27,10 @@ interface LottoHistoryDraw {
   bonus: number;
 }
 
-interface SavedCombo {
-  numbers: number[];
-  savedAt: string; // ISO string for serialization
-}
+
 
 export default function Home() {
+  const { user, loading: authLoading, isGuest, saveAsGuest } = useAuth();
   const { history, loading, error, latestDraw } = useLottoHistory();
   const {
     riskLevel,
@@ -41,16 +43,18 @@ export default function Home() {
     progressPercent,
     generateSmartBlend
   } = useSmartBlend();
+  const { savedCombos, addSavedCombo, removeSavedCombo, loading: savedLoading } = useSavedCombos();
 
   const [currentTicketNumbers, setCurrentTicketNumbers] = useState<number[]>([]);
   const [searchRound, setSearchRound] = useState("");
   const [filtered, setFiltered] = useState<LottoHistoryDraw | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
-  const [savedCombos, setSavedCombos] = useState<SavedCombo[]>([]);
   const [tooltipIdx, setTooltipIdx] = useState<number | null>(null);
   const tooltipTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [lockedNumbers, setLockedNumbers] = useState<(number | '')[]>(['', '', '', '', '', '']);
   const [selectedMethod, setSelectedMethod] = useState('random');
+  const [showBacktestModal, setShowBacktestModal] = useState(false);
+  const [selectedComboForBacktest, setSelectedComboForBacktest] = useState<{ numbers: number[]; savedAt: string } | null>(null);
 
   // Personalized method state
   const [personalType, setPersonalType] = useState<'zodiac' | 'birthdate'>('zodiac');
@@ -61,6 +65,14 @@ export default function Home() {
 
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Set latest draw as default when history loads
+  useEffect(() => {
+    if (history.length > 0 && !filtered) {
+      const latest = history.reduce((a, b) => (a.round > b.round ? a : b));
+      setFiltered(latest);
+    }
+  }, [history, filtered]);
 
   // Memoized derived values
   const last100 = useMemo(() => history.slice(-LOTTO_CONFIG.LOOKBACK_WINDOW), [history]);
@@ -160,21 +172,16 @@ export default function Home() {
     setCurrentTicketNumbers(smartBlendResults[index]?.ticket || []);
   }, [smartBlendResults, setHighlightedIndex]);
 
-  // Copy ticket numbers
-  const handleCopyTicket = useCallback((ticket: number[]) => {
-    const numbers = ticket.join(' ');
-    navigator.clipboard.writeText(numbers);
-    // Could add toast notification here
-  }, []);
+
 
   // Save ticket
-  const handleSaveTicket = useCallback((ticket: number[]) => {
-    const newCombo: SavedCombo = {
-      numbers: ticket,
-      savedAt: new Date().toISOString()
-    };
-    setSavedCombos(prev => [newCombo, ...prev]);
-  }, []);
+  const handleSaveTicket = useCallback(async (ticket: number[], method: string = 'manual') => {
+    if (isGuest) {
+      saveAsGuest();
+      return;
+    }
+    await addSavedCombo(ticket, method);
+  }, [addSavedCombo, isGuest, saveAsGuest]);
 
   // Check if generate button should be disabled
   const isGenerateDisabled = useMemo(() => {
@@ -207,12 +214,15 @@ export default function Home() {
     };
   }, [showDropdown]);
 
-  function getLottoRank(combo: SavedCombo, latestDraw: LottoHistoryDraw | null) {
+  function getLottoRank(combo: { numbers: number[] }, latestDraw: LottoHistoryDraw | null) {
     if (!latestDraw) return null;
     const mainSet = new Set(latestDraw.numbers);
     const bonus = latestDraw.bonus;
     const matchCount = combo.numbers.filter(n => mainSet.has(n)).length;
     const hasBonus = combo.numbers.includes(bonus);
+    
+
+    
     if (matchCount === 6) return '1등';
     if (matchCount === 5 && hasBonus) return '2등';
     if (matchCount === 5) return '3등';
@@ -221,8 +231,30 @@ export default function Home() {
     return '낙첨';
   }
 
+  function getBacktestResults(combo: { numbers: number[] }) {
+    const results = {
+      '1등': 0,
+      '2등': 0,
+      '3등': 0,
+      '4등': 0,
+      '5등': 0,
+      '낙첨': 0,
+      total: history.length
+    };
+
+    history.forEach(draw => {
+      const rank = getLottoRank(combo, draw);
+      if (rank) {
+        results[rank as keyof typeof results]++;
+      }
+    });
+
+    return results;
+  }
+
   return (
-    <div className="container-center" style={{ maxWidth: '1280px', width: '100%', margin: '0 auto' }}>
+    <>
+      <div className="container-center" style={{ maxWidth: '1280px', width: '100%', margin: '0 auto' }}>
       {/* Page Banner with mascot, title, subtitle, and SVG wave */}
       <div style={{ background: '#fff', width: '100vw', position: 'relative', zIndex: 10, marginBottom: 0, paddingBottom: 0 }}>
         <div className="page-banner section-spacing" style={{ background: 'var(--primary)', marginBottom: 0, paddingBottom: '2.5rem', paddingTop: '2.5rem', borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }}>
@@ -230,9 +262,32 @@ export default function Home() {
             {/* <Mascot /> */}
             <div>
               <div className="banner-title">LuckyDay</div>
-              <div className="banner-subtitle">AI 로또 번호 생성기</div>
+              <div className="banner-subtitle">AI 추첨기</div>
             </div>
           </div>
+          
+          {/* Auth section */}
+          <div style={{ position: 'absolute', top: '1.5rem', right: '2rem', zIndex: 99999 }}>
+            {authLoading ? (
+              <div style={{ color: 'white', fontSize: '0.9rem' }}>로딩 중...</div>
+            ) : user ? (
+              <UserMenu />
+            ) : (
+              <button
+                onClick={() => saveAsGuest()}
+                className="login-button"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path
+                    d="M8 8C10.21 8 12 6.21 12 4C12 1.79 10.21 0 8 0C5.79 0 4 1.79 4 4C4 6.21 5.79 8 8 8ZM8 10C5.33 10 0 11.34 0 14V16H16V14C16 11.34 10.67 10 8 10Z"
+                    fill="currentColor"
+                  />
+                </svg>
+                로그인
+              </button>
+            )}
+          </div>
+          
           {/* SVG wave bottom edge */}
           <svg className="banner-wave" viewBox="0 0 1440 40" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" style={{ display: 'block', marginBottom: '-1px' }}>
             <path d="M0 0C360 40 1080 40 1440 0V40H0V0Z" fill="#fff"/>
@@ -291,21 +346,26 @@ export default function Home() {
 
       {/* Generate Numbers (main feature, visually dominant) */}
       <section
-        className="main-generator-card card-generator flex flex-col items-center border border-primary/20"
+        className="main-generator-card card-generator flex flex-col border border-primary/20"
         style={{
           margin: '0 auto',
           zIndex: 2,
           width: '100%',
           maxWidth: '1280px',
           minWidth: 0,
-          padding: '1.5rem 1rem',
+          padding: '2.5rem',
           boxSizing: 'border-box',
         }}
       >
         <h2 className="generator-title flex items-center gap-2" style={{ fontSize: '2rem' }}>
           <span role="img" aria-label="sparkles">✨</span> 오늘의 행운 번호
         </h2>
-        {currentTicketNumbers.length > 0 ? (
+        {selectedMethod === 'smartblend' && smartBlendResults.length > 0 ? (
+          // Empty state for SmartBlend since it's handled separately
+          <div className="mt-8 mb-8 text-center text-gray-500">
+            AI 추첨기 조합이 아래에 표시됩니다
+          </div>
+        ) : currentTicketNumbers.length > 0 ? (
           <div
             className="number-balls-row mt-8 mb-8 justify-center flex-nowrap items-center"
             style={{
@@ -389,6 +449,7 @@ export default function Home() {
             </div>
           ))}
         </div>
+
         {/* Personalized input UI below buttons, centered */}
         {selectedMethod === 'personal' && (
           <div className="flex flex-col gap-4 mb-6 w-full items-center justify-center">
@@ -452,6 +513,7 @@ export default function Home() {
             )}
           </div>
         )}
+
         {/* 반자동 input UI below buttons, centered */}
         {selectedMethod === 'semi' && (
           <div className="flex flex-col gap-4 mb-6 w-full items-center justify-center">
@@ -517,6 +579,8 @@ export default function Home() {
             </button>
           </div>
         )}
+
+        {/* SmartBlend Panel */}
         {selectedMethod === 'smartblend' && (
           <SmartBlendPanel
             riskLevel={riskLevel}
@@ -524,97 +588,165 @@ export default function Home() {
             isGenerating={isGenerating}
             progressPhase={progressPhase}
             progressPercent={progressPercent}
-            onGenerate={() => handleGenerate()}
           />
         )}
         <div className="flex gap-2 w-full max-w-xs mb-8" style={{ marginTop: '2rem', marginBottom: '2.5rem' }}>
-          <button
-            className="btn-primary flex-1"
-            style={{ marginRight: '0.7rem' }}
-            onClick={handleGenerate}
-            disabled={isGenerateDisabled}
-          >
-            <span role="img" aria-label="dice">🎲</span> 번호 생성하기
-          </button>
-          <button
-            className="btn-secondary flex-1"
-            style={{ marginLeft: '0.7rem' }}
-            onClick={() => {
-              if (currentTicketNumbers.length > 0) {
-                handleSaveTicket(currentTicketNumbers);
-              }
-            }}
-            disabled={currentTicketNumbers.length === 0}
-          >
-            <span role="img" aria-label="save">💾</span> 번호 저장하기
-          </button>
+          {selectedMethod === 'smartblend' ? (
+            // SmartBlend-specific buttons
+            <>
+              <button
+                className="btn-primary flex-1"
+                style={{ marginRight: '0.7rem' }}
+                onClick={handleGenerate}
+                disabled={isGenerateDisabled || isGenerating}
+              >
+                <span role="img" aria-label="dice">🎲</span> 5개 번호 생성하기
+              </button>
+              {smartBlendResults.length > 0 && (
+                <button
+                  onClick={() => {
+                    smartBlendResults.forEach(result => {
+                      handleSaveTicket(result.ticket, 'smartblend');
+                    });
+                  }}
+                  className="btn-secondary flex-1"
+                  style={{ marginLeft: '0.7rem' }}
+                  aria-label="5개 조합 모두 저장"
+                >
+                  <span role="img" aria-label="save">💾</span> 5개 조합 모두 저장
+                </button>
+              )}
+            </>
+          ) : (
+            // Regular buttons for other methods
+            <>
+              <button
+                className="btn-primary flex-1"
+                style={{ marginRight: '0.7rem' }}
+                onClick={handleGenerate}
+                disabled={isGenerateDisabled || (selectedMethod === 'smartblend' && isGenerating)}
+              >
+                <span role="img" aria-label="dice">🎲</span> 번호 생성하기
+              </button>
+              <button
+                className="btn-secondary flex-1"
+                style={{ marginLeft: '0.7rem' }}
+                onClick={() => {
+                  if (currentTicketNumbers.length > 0) {
+                    handleSaveTicket(currentTicketNumbers);
+                  }
+                }}
+                disabled={currentTicketNumbers.length === 0}
+              >
+                <span role="img" aria-label="save">💾</span> 번호 저장하기
+              </button>
+            </>
+          )}
         </div>
       </section>
 
-      {/* SmartBlend Results Display */}
+      {/* SmartBlend Results - Below main generator card */}
       {selectedMethod === 'smartblend' && smartBlendResults.length > 0 && (
-        <div className="smart-blend-results mt-8">
-          {/* Primary Ticket */}
-          {smartBlendResults[highlightedIndex] && (
-            <div className="mb-8">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-gray-800">우선 추천</h3>
-                <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                  추천 1위 조합
-                </span>
-              </div>
-              <TicketCard
-                ticket={smartBlendResults[highlightedIndex].ticket}
-                explain={smartBlendResults[highlightedIndex].explain}
-                isPrimary={true}
-                onCopy={() => handleCopyTicket(smartBlendResults[highlightedIndex].ticket)}
-                onSave={() => handleSaveTicket(smartBlendResults[highlightedIndex].ticket)}
-              />
+        <section
+          className="card-generator flex flex-col border border-primary/20"
+          style={{
+            margin: '0 auto',
+            zIndex: 2,
+            width: '100%',
+            maxWidth: '1280px',
+            minWidth: 0,
+            padding: '2.5rem',
+            boxSizing: 'border-box',
+            transition: 'all 0.3s ease',
+            cursor: 'pointer',
+            borderWidth: 4,
+            borderRadius: '2.5rem',
+            boxShadow: '0 12px 48px rgba(0,100,255,0.12), 0 2px 12px rgba(0,0,0,0.06)',
+            background: '#fff',
+            minHeight: '350px'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 16px 56px rgba(0,100,255,0.15), 0 4px 16px rgba(0,0,0,0.08)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 12px 48px rgba(0,100,255,0.12), 0 2px 12px rgba(0,0,0,0.06)';
+          }}>
+            <h2 className="heading-md mb-4 text-center w-full">
+              <span role="img" aria-label="sparkles">✨</span> AI 추첨기 추천 조합
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" style={{ width: '100%' }}>
+              {smartBlendResults.map((result, index) => (
+                <div key={index} className="relative">
+                  <div className={`border-2 rounded-xl p-4 transition-all duration-200 ${
+                    index === highlightedIndex 
+                      ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 shadow-lg' 
+                      : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-md cursor-pointer'
+                  }`} onClick={() => handleTicketSelect(index)}>
+                    {/* Single horizontal row: sub-heading | numbers | save button */}
+                    <div className="smartblend-row" style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'space-between',
+                      width: '100%',
+                      gap: '0.5rem'
+                    }}>
+                      {/* Left: Sub-heading */}
+                      <div className="flex-shrink-0" style={{ minWidth: '80px', textAlign: 'left' }}>
+                        <h3 className={`font-semibold ${
+                          index === highlightedIndex ? 'text-blue-800' : 'text-gray-700'
+                        }`}>
+                          추천 {index + 1}
+                        </h3>
+                      </div>
+                      
+                      {/* Middle: Number balls */}
+                      <div className="flex-1" style={{ 
+                        display: 'flex', 
+                        flexDirection: 'row',
+                        flexWrap: 'nowrap',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        margin: '0 1rem'
+                      }}>
+                        {result.ticket.map((num) => (
+                          <NumberBall 
+                            key={num} 
+                            number={num} 
+                            variant="main" 
+                            className="w-8 h-8 text-sm"
+                          />
+                        ))}
+                      </div>
+                      
+                      {/* Right: Save button */}
+                      <div className="flex-shrink-0" style={{ minWidth: '80px', textAlign: 'right' }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSaveTicket(result.ticket);
+                          }}
+                          className="text-xs px-3 py-1 bg-green-100 text-green-600 rounded hover:bg-green-200 transition-colors"
+                          aria-label="번호 저장"
+                        >
+                          저장
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-          )}
-
-          {/* Secondary Tickets Grid */}
-          <div className="mb-6">
-            <h4 className="text-lg font-semibold mb-4 text-gray-700">추가 추천 조합</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {smartBlendResults.map((result, index) => {
-                if (index === highlightedIndex) return null; // Skip primary ticket
-                return (
-                  <TicketCard
-                    key={index}
-                    ticket={result.ticket}
-                    explain={result.explain}
-                    onClick={() => handleTicketSelect(index)}
-                    onCopy={() => handleCopyTicket(result.ticket)}
-                    onSave={() => handleSaveTicket(result.ticket)}
-                  />
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Regenerate Button */}
-          <div className="text-center">
-            <button
-              onClick={handleGenerate}
-              disabled={isGenerating}
-              className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
-                isGenerating 
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                  : 'bg-gray-600 text-white hover:bg-gray-700 active:scale-95'
-              }`}
-              aria-label="다시 생성"
-            >
-              {isGenerating ? '생성 중...' : '다시 생성'}
-            </button>
-          </div>
-        </div>
+        </section>
       )}
 
       {/* Centered historicals card at the bottom */}
       <div className="two-col-row max-w-5xl mx-auto mt-2 mb-8" style={{ gap: '1.5rem', maxWidth: '1280px', width: '100%' }}>
         {/* Left: Historical search card, content centered */}
-        <div className="card-generator two-col-card flex flex-col items-center justify-center" style={{ borderWidth: 4, borderRadius: '2.5rem', boxShadow: '0 12px 48px rgba(0,100,255,0.12), 0 2px 12px rgba(0,0,0,0.06)', background: '#fff', paddingLeft: '2.5rem', paddingRight: '2.5rem', minHeight: '350px' }}>
+        <div className="card-generator two-col-card flex flex-col justify-center" style={{ borderWidth: 4, borderRadius: '2.5rem', boxShadow: '0 12px 48px rgba(0,100,255,0.12), 0 2px 12px rgba(0,0,0,0.06)', background: '#fff', padding: '2.5rem', minHeight: '350px' }}>
           <h2 className="heading-md mb-4 text-center w-full">Old Historical Numbers</h2>
           <div className="mb-6" style={{ textAlign: 'center' }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', position: 'relative' }}>
@@ -750,21 +882,27 @@ export default function Home() {
           </section>
         </div>
         {/* Right: Placeholder card for future content */}
-        <div className="card-generator two-col-card" style={{ borderWidth: 4, borderRadius: '2.5rem', boxShadow: '0 12px 48px rgba(0,100,255,0.12), 0 2px 12px rgba(0,0,0,0.06)', background: '#fff', paddingLeft: '2.5rem', paddingRight: '2.5rem', minHeight: '350px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start' }}>
+        <div className="card-generator two-col-card" style={{ borderWidth: 4, borderRadius: '2.5rem', boxShadow: '0 12px 48px rgba(0,100,255,0.12), 0 2px 12px rgba(0,0,0,0.06)', background: '#fff', padding: '2.5rem', minHeight: '350px', display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'flex-start' }}>
           <h2 className="heading-md mb-4 text-center w-full">저장한 번호</h2>
           {savedCombos.length === 0 ? (
             <span className="text-gray-300 mt-8">아직 저장된 번호가 없습니다.</span>
           ) : (
-            <div style={{ width: '100%', maxHeight: '270px', overflowY: 'auto' }}>
+            <div style={{ width: '100%', maxHeight: '270px', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
               {savedCombos.map((combo, idx) => {
-                const latest = history.length > 0 ? history.reduce((a, b) => (a.round > b.round ? a : b)) : null;
-                const mainSet = latest ? new Set(latest.numbers) : new Set<number>();
-                const bonus = latest ? latest.bonus : null;
-                const rank = getLottoRank(combo, latest);
+                // Use the selected historical round (filtered) instead of latest
+                const selectedDraw = filtered || (history.length > 0 ? history.reduce((a, b) => (a.round > b.round ? a : b)) : null);
+                const rank = getLottoRank({ numbers: combo.numbers }, selectedDraw);
+
                 return (
-                  <div key={combo.savedAt + '-' + combo.numbers.join('-')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.2rem', padding: '0.2rem 0.1rem', borderBottom: '1px solid #f1f5f9', minHeight: '2.6rem' }}>
-                    <div className="number-balls-row flex-nowrap" style={{ fontSize: '1.15rem', gap: '0.18rem', flexWrap: 'nowrap' }}>
+                  <div key={combo.id || combo.saved_at + '-' + combo.numbers.join('-')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.2rem', padding: '0.2rem 0.1rem', borderBottom: '1px solid #f1f5f9', minHeight: '2.6rem' }}>
+                    {/* Rank on the left */}
+                    <span className="text-xs text-gray-500" style={{ minWidth: 80, fontWeight: 600 }}>{rank}</span>
+                    
+                    {/* Number balls in the middle */}
+                    <div className="flex-nowrap flex-1" style={{ display: 'flex', flexDirection: 'row', fontSize: '1.15rem', gap: '0.35rem', flexWrap: 'nowrap', justifyContent: 'center', alignItems: 'center', margin: '0 1rem' }}>
                       {combo.numbers.map((n: number, i: number) => {
+                        const mainSet = selectedDraw ? new Set(selectedDraw.numbers) : new Set<number>();
+                        const bonus = selectedDraw ? selectedDraw.bonus : null;
                         const isMatch = mainSet.has(n);
                         const isBonus = bonus === n;
                         let ballClass = '';
@@ -776,31 +914,80 @@ export default function Home() {
                         );
                       })}
                     </div>
-                    <span className="text-xs text-gray-500 ml-2" style={{ minWidth: 36, fontWeight: 600 }}>{rank}</span>
-                    <button
-                      onClick={() => {
-                        setSavedCombos(savedCombos.filter((_, i) => i !== idx));
-                      }}
-                      style={{
-                        marginLeft: '0.7rem',
-                        fontSize: '0.95rem',
-                        color: '#888',
-                        background: 'none',
-                        border: 'none',
-                        borderBottom: '1px solid #bbb',
-                        padding: '0 0.4rem',
-                        cursor: 'pointer',
-                        height: '1.8rem',
-                        lineHeight: 1.2,
-                        display: 'inline-block',
-                        verticalAlign: 'middle',
-                        outline: 'none',
-                        transition: 'color 0.15s, border-color 0.15s',
-                      }}
-                      aria-label="삭제"
-                    >
-                      삭제
-                    </button>
+                    
+                                        {/* Action buttons on the right */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 120 }}>
+                      {/* Magnifying glass icon */}
+                      <button
+                        onClick={() => {
+                          setSelectedComboForBacktest({ numbers: combo.numbers, savedAt: combo.saved_at });
+                          setShowBacktestModal(true);
+                        }}
+                        style={{
+                          fontSize: '0.9rem',
+                          color: '#6b7280',
+                          background: '#f8fafc',
+                          border: '1px solid #e2e8f0',
+                          padding: '0.4rem',
+                          cursor: 'pointer',
+                          borderRadius: '6px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'all 0.15s',
+                          minWidth: '32px',
+                          minHeight: '32px',
+                        }}
+                        aria-label="백테스트 결과 보기"
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#f1f5f9';
+                          e.currentTarget.style.borderColor = '#cbd5e1';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = '#f8fafc';
+                          e.currentTarget.style.borderColor = '#e2e8f0';
+                        }}
+                      >
+                        <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <circle cx="11" cy="11" r="8"/>
+                          <path d="m21 21-4.35-4.35"/>
+                        </svg>
+                      </button>
+                      
+                      {/* Delete button */}
+                      <button
+                        onClick={() => {
+                          if (combo.id) {
+                          removeSavedCombo(combo.id);
+                        }
+                        }}
+                        style={{
+                          fontSize: '0.85rem',
+                          color: '#ef4444',
+                          background: '#fef2f2',
+                          border: '1px solid #fecaca',
+                          padding: '0.3rem 0.6rem',
+                          cursor: 'pointer',
+                          borderRadius: '6px',
+                          display: 'inline-block',
+                          outline: 'none',
+                          transition: 'all 0.15s',
+                          fontWeight: '500',
+                          minHeight: '32px',
+                        }}
+                        aria-label="삭제"
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#fee2e2';
+                          e.currentTarget.style.borderColor = '#fca5a5';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = '#fef2f2';
+                          e.currentTarget.style.borderColor = '#fecaca';
+                        }}
+                      >
+                        삭제
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -809,5 +996,209 @@ export default function Home() {
         </div>
       </div>
     </div>
+
+    {/* Backtest Modal */}
+    {showBacktestModal && selectedComboForBacktest && (
+      <div 
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '1rem'
+        }}
+        onClick={() => setShowBacktestModal(false)}
+      >
+        <div 
+          style={{
+            backgroundColor: 'white',
+            borderRadius: '1.5rem',
+            padding: '3.5rem',
+            maxWidth: '1200px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            position: 'relative',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+            border: '1px solid rgba(0, 0, 0, 0.1)'
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Close button */}
+          <button
+            onClick={() => setShowBacktestModal(false)}
+            style={{
+              position: 'absolute',
+              top: '1.5rem',
+              right: '1.5rem',
+              background: 'none',
+              border: 'none',
+              fontSize: '1.8rem',
+              cursor: 'pointer',
+              color: '#6b7280',
+              width: '2.5rem',
+              height: '2.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '50%',
+              transition: 'all 0.2s ease',
+              fontWeight: '300'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#f3f4f6';
+              e.currentTarget.style.color = '#374151';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.color = '#6b7280';
+            }}
+            aria-label="닫기"
+          >
+            ×
+          </button>
+
+          {/* Modal content */}
+          <div style={{ textAlign: 'center' }}>
+            <h2 className="text-3xl font-bold text-gray-800 mb-8">
+              <span role="img" aria-label="chart">📊</span> 백테스트 결과
+            </h2>
+            
+            {/* Selected combination */}
+            <div className="mb-12 p-8 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+              <h3 className="text-base font-semibold text-blue-700 mb-4">분석 대상 번호</h3>
+              <div className="flex justify-center gap-3" style={{
+                display: 'flex',
+                flexDirection: 'row',
+                flexWrap: 'nowrap',
+                justifyContent: 'center',
+                alignItems: 'center'
+              }}>
+                {selectedComboForBacktest.numbers.map((num, i) => (
+                  <NumberBall 
+                    key={i} 
+                    number={num} 
+                    variant="main" 
+                    className="w-12 h-12 text-lg"
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Backtest results */}
+            {(() => {
+              const results = getBacktestResults(selectedComboForBacktest!);
+              return (
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-800 mb-8">
+                    전체 {results.total}회차 분석 결과
+                  </h3>
+                  
+                  <div className="mb-12 rounded-xl border border-gray-200 shadow-sm" style={{ textAlign: 'center', width: '100%', margin: '0 auto' }}>
+                    <table className="w-full" style={{ margin: '0 auto', borderCollapse: 'collapse', width: '100%', tableLayout: 'fixed' }}>
+                      <thead>
+                        <tr style={{
+                          background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)',
+                          color: 'white'
+                        }}>
+                          <th className="px-16 py-10 text-center font-semibold" style={{ borderBottom: '2px solid #1e40af', width: '25%' }}>등수</th>
+                          <th className="px-16 py-10 text-center font-semibold" style={{ borderBottom: '2px solid #1e40af', width: '40%' }}>회수</th>
+                          <th className="px-16 py-10 text-center font-semibold" style={{ borderBottom: '2px solid #1e40af', width: '35%' }}>비율</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(['1등', '2등', '3등', '4등', '5등'] as const).map((rank, index) => (
+                          <tr key={rank} className={`${
+                            index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                          } hover:bg-blue-50 transition-colors`} style={{ borderBottom: '1px solid #dbeafe' }}>
+                            <td className="px-16 py-10 text-center" style={{ borderRight: '1px solid #dbeafe', width: '25%' }}>
+                              <span className={`font-semibold ${
+                                rank === '1등' ? 'text-yellow-600' :
+                                rank === '2등' ? 'text-gray-600' :
+                                rank === '3등' ? 'text-orange-600' :
+                                rank === '4등' ? 'text-blue-600' :
+                                'text-green-600'
+                              }`}>
+                                {rank}
+                              </span>
+                            </td>
+                            <td className="px-16 py-10 text-center" style={{ borderRight: '1px solid #dbeafe', width: '40%' }}>
+                              <span className="text-4xl font-bold text-blue-600">{results[rank]}</span>
+                              <span className="text-lg text-gray-500 ml-3">회</span>
+                            </td>
+                            <td className="px-16 py-10 text-center" style={{ width: '35%' }}>
+                              <span className="text-2xl font-semibold text-gray-700">
+                                {((results[rank] / results.total) * 100).toFixed(1)}%
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Summary */}
+                  <div className="p-8 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+                    <h4 className="font-bold text-blue-800 mb-6 text-xl text-center">📈 성과 요약</h4>
+                    <div className="rounded-xl border border-blue-200 shadow-sm" style={{ textAlign: 'center', width: '100%', margin: '0 auto' }}>
+                      <table className="w-full" style={{ margin: '0 auto', borderCollapse: 'collapse', width: '100%', tableLayout: 'fixed' }}>
+                        <thead>
+                          <tr style={{
+                            background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)',
+                            color: 'white'
+                          }}>
+                            <th className="px-16 py-10 text-center font-semibold" style={{ borderBottom: '2px solid #1e40af', width: '50%' }}>지표</th>
+                            <th className="px-16 py-10 text-center font-semibold" style={{ borderBottom: '2px solid #1e40af', width: '50%' }}>수치</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="bg-white hover:bg-blue-50 transition-colors" style={{ borderBottom: '1px solid #dbeafe' }}>
+                            <td className="px-16 py-10 text-center font-semibold text-gray-700" style={{ borderRight: '1px solid #dbeafe', width: '50%' }}>총 당첨 횟수</td>
+                            <td className="px-16 py-10 text-center" style={{ width: '50%' }}>
+                              <span className="text-4xl font-bold text-blue-600">
+                                {results['1등'] + results['2등'] + results['3등'] + results['4등'] + results['5등']}
+                              </span>
+                              <span className="text-lg text-gray-500 ml-3">회</span>
+                            </td>
+                          </tr>
+                          <tr className="bg-gray-50 hover:bg-blue-50 transition-colors" style={{ borderBottom: '1px solid #dbeafe' }}>
+                            <td className="px-16 py-10 text-center font-semibold text-gray-700" style={{ borderRight: '1px solid #dbeafe', width: '50%' }}>전체 당첨률</td>
+                            <td className="px-16 py-10 text-center" style={{ width: '50%' }}>
+                              <span className="text-4xl font-bold text-blue-600">
+                                {(((results['1등'] + results['2등'] + results['3등'] + results['4등'] + results['5등']) / results.total) * 100).toFixed(1)}%
+                              </span>
+                            </td>
+                          </tr>
+                          <tr className="bg-white hover:bg-blue-50 transition-colors">
+                            <td className="px-16 py-10 text-center font-semibold text-gray-700" style={{ borderRight: '1px solid #dbeafe', width: '50%' }}>최다 당첨 등수</td>
+                            <td className="px-16 py-10 text-center" style={{ width: '50%' }}>
+                              <span className="text-4xl font-bold text-blue-600">
+                                {['1등', '2등', '3등', '4등', '5등'].reduce((max, rank) => 
+                                  results[rank as keyof typeof results] > results[max as keyof typeof results] ? rank : max
+                                )}
+                              </span>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Auth Modal */}
+    <AuthModal />
+  </>
   );
 }

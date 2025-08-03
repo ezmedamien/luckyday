@@ -37,7 +37,7 @@ export const GENERATOR_METHODS = [
   },
   {
     id: 'smartblend',
-    label: '스마트 블렌드',
+    label: 'AI 추첨기',
     description: 'AI가 추천하는 최적 번호 조합'
   },
 ] as const;

@@ -24,6 +24,17 @@ export default function NumberBall({ number, variant = 'main', className = '' }:
     colorClass = 'lotto-range-2';
   }
   return (
-    <span className={`number-ball ${colorClass} ${className}`}>{number}</span>
+    <span 
+      className={`number-ball ${colorClass} ${className}`}
+      style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        flexShrink: 0,
+        flexGrow: 0
+      }}
+    >
+      {number}
+    </span>
   );
 } 

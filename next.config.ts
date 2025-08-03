@@ -29,8 +29,8 @@ const nextConfig: NextConfig = {
       ],
     });
 
-    // Bundle analyzer (only in development)
-    if (dev && !isServer) {
+    // Bundle analyzer (only in development and when ANALYZE env var is set)
+    if (dev && !isServer && process.env.ANALYZE === 'true') {
       const { BundleAnalyzerPlugin } = require('webpack-bundle-analyzer');
       config.plugins.push(
         new BundleAnalyzerPlugin({
