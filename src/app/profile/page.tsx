@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -19,17 +19,7 @@ export default function ProfilePage() {
   const [savedCombos, setSavedCombos] = useState<SavedCombo[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!authLoading) {
-      if (!user) {
-        router.push('/');
-        return;
-      }
-      fetchSavedCombos();
-    }
-  }, [user, authLoading, router, fetchSavedCombos]);
-
-  const fetchSavedCombos = async () => {
+  const fetchSavedCombos = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('saved_combos')
@@ -48,7 +38,17 @@ export default function ProfilePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!authLoading) {
+      if (!user) {
+        router.push('/');
+        return;
+      }
+      fetchSavedCombos();
+    }
+  }, [user, authLoading, router, fetchSavedCombos]);
 
   const getInitials = (email: string) => {
     return email.charAt(0).toUpperCase();
