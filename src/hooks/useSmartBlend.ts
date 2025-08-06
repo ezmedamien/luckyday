@@ -26,7 +26,7 @@ interface UseSmartBlendReturn {
 }
 
 export function useSmartBlend(): UseSmartBlendReturn {
-  const [riskLevel, setRiskLevel] = useState<number>(1);
+  const [riskLevel, setRiskLevel] = useState<number>(1); // Keep for compatibility but unused
   const [smartBlendResults, setSmartBlendResults] = useState<SmartBlendResult[]>([]);
   const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
@@ -56,7 +56,8 @@ export function useSmartBlend(): UseSmartBlendReturn {
 
       await new Promise(resolve => setTimeout(resolve, 300));
       
-      const results = generateSmartBlendCore(history.map(d => d.numbers), riskLevel);
+      // Generate 5 combinations with the new strategy approach
+      const results = generateSmartBlendCore(history.map(d => d.numbers), 0); // riskLevel no longer used
       setSmartBlendResults(results);
       setHighlightedIndex(0);
       
@@ -71,7 +72,7 @@ export function useSmartBlend(): UseSmartBlendReturn {
     } finally {
       setIsGenerating(false);
     }
-  }, [riskLevel]);
+  }, []); // Removed riskLevel dependency
 
   return {
     riskLevel,

@@ -1,4 +1,4 @@
-// Korean Lotto 6/45 Smart Generator - Survival Focused
+// Korean Lotto 6/45 Smart Generator - Refined Strategy
 import { simulatePayout } from './scorers';
 
 /**
@@ -32,19 +32,46 @@ function buildCoOccurrenceMatrix(draws: number[][]): number[][] {
 }
 
 /**
- * Score ticket by co-occurrence: sum of top N pair scores
+ * Build Markov transition matrix - what numbers tend to follow each number
  */
-function coOccurrenceScore(ticket: number[], coMatrix: number[][], topN: number = 3): number {
-  const pairScores: number[] = [];
-  for (let i = 0; i < ticket.length; i++) {
-    for (let j = i + 1; j < ticket.length; j++) {
-      const a = ticket[i] - 1;
-      const b = ticket[j] - 1;
-      pairScores.push(coMatrix[a][b]);
+function buildTransitionMatrix(draws: number[][]): Map<number, Map<number, number>> {
+  const transitions = new Map<number, Map<number, number>>();
+  
+  // Initialize transitions for all numbers 1-45
+  for (let i = 1; i <= 45; i++) {
+    transitions.set(i, new Map<number, number>());
+  }
+  
+  // Analyze each draw to build transition frequencies
+  for (const draw of draws) {
+    for (let i = 0; i < draw.length; i++) {
+      const currentNum = draw[i];
+      const currentTransitions = transitions.get(currentNum)!;
+      
+      // Count what numbers appear in the same draw (co-occurrence)
+      for (let j = 0; j < draw.length; j++) {
+        if (i !== j) {
+          const nextNum = draw[j];
+          currentTransitions.set(nextNum, (currentTransitions.get(nextNum) || 0) + 1);
+        }
+      }
     }
   }
-  pairScores.sort((a, b) => b - a);
-  return pairScores.slice(0, topN).reduce((sum, v) => sum + v, 0);
+  
+  return transitions;
+}
+
+/**
+ * Get top N numbers that historically follow a given number
+ */
+function getTopFollowers(num: number, transitions: Map<number, Map<number, number>>, topN: number = 3): number[] {
+  const followers = transitions.get(num);
+  if (!followers) return [];
+  
+  return Array.from(followers.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, topN)
+    .map(([num, _]) => num);
 }
 
 /**
@@ -88,6 +115,25 @@ function isTooSimilar(t1: number[], t2: number[]): boolean {
 }
 
 /**
+ * Check if numbers are fully sequential (1,2,3,4,5,6)
+ */
+function isSequential(ticket: number[]): boolean {
+  const sorted = [...ticket].sort((a, b) => a - b);
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] !== sorted[i-1] + 1) return false;
+  }
+  return true;
+}
+
+/**
+ * Check if ticket has too many repeated numbers from last week
+ */
+function hasTooManyRepeats(ticket: number[], lastWeekNumbers: number[]): boolean {
+  const repeats = ticket.filter(n => lastWeekNumbers.includes(n)).length;
+  return repeats >= 3; // Allow max 2 repeats
+}
+
+/**
  * Sample one ticket using weighted sampling without replacement
  */
 function sampleTicket(bayesWeights: number[]): number[] {
@@ -114,9 +160,72 @@ function sampleTicket(bayesWeights: number[]): number[] {
 }
 
 /**
- * Main Korean Lotto 6/45 Smart Generator
+ * Generate Markov-style combination based on last week's numbers
+ */
+function generateMarkovCombination(lastWeekNumbers: number[], transitions: Map<number, Map<number, number>>, coMatrix: number[][]): number[] {
+  const pool: number[] = [];
+  
+  // For each number from last week, get top followers
+  for (const num of lastWeekNumbers) {
+    const followers = getTopFollowers(num, transitions, 3);
+    pool.push(...followers);
+  }
+  
+  // Remove duplicates and add some random numbers for variety
+  const uniquePool = [...new Set(pool)];
+  while (uniquePool.length < 20) {
+    const randomNum = Math.floor(Math.random() * 45) + 1;
+    if (!uniquePool.includes(randomNum)) {
+      uniquePool.push(randomNum);
+    }
+  }
+  
+  // Score combinations from the pool
+  const combinations: { numbers: number[], score: number }[] = [];
+  
+  // Generate multiple combinations from the pool
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const shuffled = [...uniquePool].sort(() => Math.random() - 0.5);
+    const combination = shuffled.slice(0, 6).sort((a, b) => a - b);
+    
+    // Avoid sequential and too many repeats
+    if (isSequential(combination) || hasTooManyRepeats(combination, lastWeekNumbers)) {
+      continue;
+    }
+    
+    // Score based on co-occurrence and spread
+    const coScore = coOccurrenceScore(combination, coMatrix);
+    const spread = spreadScore(combination);
+    const totalScore = coScore + spread;
+    
+    combinations.push({ numbers: combination, score: totalScore });
+  }
+  
+  // Return the best scoring combination
+  combinations.sort((a, b) => b.score - a.score);
+  return combinations[0]?.numbers || sampleTicket(Array(45).fill(1));
+}
+
+/**
+ * Score ticket by co-occurrence: sum of top N pair scores
+ */
+function coOccurrenceScore(ticket: number[], coMatrix: number[][], topN: number = 3): number {
+  const pairScores: number[] = [];
+  for (let i = 0; i < ticket.length; i++) {
+    for (let j = i + 1; j < ticket.length; j++) {
+      const a = ticket[i] - 1;
+      const b = ticket[j] - 1;
+      pairScores.push(coMatrix[a][b]);
+    }
+  }
+  pairScores.sort((a, b) => b - a);
+  return pairScores.slice(0, topN).reduce((sum, v) => sum + v, 0);
+}
+
+/**
+ * Main Korean Lotto 6/45 Smart Generator - Refined Strategy
  * @param draws - historical draws (array of arrays)
- * @param riskLevel - 0 (Safe), 1 (Balanced), 2 (Aggressive)
+ * @param riskLevel - unused in new approach, kept for compatibility
  * @returns Array of 5 ticket objects with explanations
  */
 export function generateSmartBlend(draws: number[][], riskLevel: number): { ticket: number[], explain: string }[] {
@@ -127,75 +236,121 @@ export function generateSmartBlend(draws: number[][], riskLevel: number): { tick
     }));
   }
   
-  const lookbackSafe = 100;
-  const lookbackBalanced = 50;
+  const lastWeekNumbers = draws[draws.length - 1] || [];
   const coMatrix = buildCoOccurrenceMatrix(draws);
+  const transitions = buildTransitionMatrix(draws);
   const bayesWeights = Array.from({ length: 45 }, (_, i) => getBayesWeight(i + 1, draws));
   const final: { ticket: number[], explain: string }[] = [];
   
-  const maxAttempts = 500; // guard
+  const maxAttempts = 500;
   let attempts = 0;
   
-  while (final.length < 5 && attempts < maxAttempts) {
+  // Strategy 1: 안심 전략 (Safe Strategy)
+  attempts = 0;
+  while (final.length < 1 && attempts < maxAttempts) {
     attempts++;
     const ticket = sampleTicket(bayesWeights);
     
-    // dedupe against existing
     if (final.some(f => isTooSimilar(f.ticket, ticket))) continue;
+    if (isSequential(ticket)) continue;
     
-    // Evaluate per risk level
-    let ok = false;
-    let explainParts: string[] = [];
-    
-    if (riskLevel === 0) {
-      // Safe: require >=1 hit in last 100 draws
-      const recent = draws.slice(-lookbackSafe);
-      const hits = count5thPlusHits(ticket, recent);
-      if (hits >= 1) {
-        ok = true;
-        explainParts.push("최근 100회 기준 5등 이상 당첨 이력이 있습니다.");
-      }
-    } else if (riskLevel === 1) {
-      const recent = draws.slice(-lookbackBalanced);
-      const hits = count5thPlusHits(ticket, recent);
-      if (hits >= 1) {
-        ok = true;
-        explainParts.push("최근 50회 기준 5등 이상 당첨 이력이 있습니다.");
-      }
-    } else if (riskLevel === 2) {
-      ok = true;
-      explainParts.push("공격 전략: 과거 당첨 이력 조건 없이 다양성과 엔트로피를 우선했습니다.");
+    // Safe strategy: require >=1 hit in last 100 draws
+    const recent = draws.slice(-100);
+    const hits = count5thPlusHits(ticket, recent);
+    if (hits >= 1) {
+      final.push({
+        ticket,
+        explain: "안심 전략: 최근 100회 기준 5등 이상 당첨 이력이 있는 안전한 조합입니다."
+      });
     }
+  }
+  
+  // Strategy 2: 공격 전략 (Aggressive Strategy)
+  attempts = 0;
+  while (final.length < 2 && attempts < maxAttempts) {
+    attempts++;
+    const ticket = sampleTicket(bayesWeights);
     
-    if (!ok) continue;
+    if (final.some(f => isTooSimilar(f.ticket, ticket))) continue;
+    if (isSequential(ticket)) continue;
     
-    // Co-occurrence preference
+    // Aggressive strategy: focus on high variance and co-occurrence
     const coScore = coOccurrenceScore(ticket, coMatrix);
-    if (riskLevel === 0 && coScore > 0) {
-      explainParts.push("통계적으로 자주 함께 등장한 숫자 조합을 포함합니다.");
-    } else if (riskLevel === 1 && coScore > 0) {
-      explainParts.push("균형 전략으로 부분적인 연관 숫자 조합을 활용했습니다.");
+    const spread = spreadScore(ticket);
+    
+    if (spread > 100 && coScore > 0) {
+      final.push({
+        ticket,
+        explain: "공격 전략: 높은 분산과 통계적 연관성을 활용한 도전적인 조합입니다."
+      });
+    }
+  }
+  
+  // Strategy 3-4: 균형 전략 (Balanced Strategy)
+  attempts = 0;
+  while (final.length < 4 && attempts < maxAttempts) {
+    attempts++;
+    const ticket = sampleTicket(bayesWeights);
+    
+    if (final.some(f => isTooSimilar(f.ticket, ticket))) continue;
+    if (isSequential(ticket)) continue;
+    
+    // Balanced strategy: moderate requirements
+    const recent = draws.slice(-50);
+    const hits = count5thPlusHits(ticket, recent);
+    const coScore = coOccurrenceScore(ticket, coMatrix);
+    
+    if (hits >= 1 || coScore > 0) {
+      final.push({
+        ticket,
+        explain: "균형 전략: 안전성과 수익성을 균형있게 조합한 번호입니다."
+      });
+    }
+  }
+  
+  // Strategy 5: 마르코프 전략 (Markov Strategy)
+  if (lastWeekNumbers.length > 0) {
+    const markovTicket = generateMarkovCombination(lastWeekNumbers, transitions, coMatrix);
+    
+    // Create explanation for Markov strategy
+    const usedFromLastWeek = markovTicket.filter(n => lastWeekNumbers.includes(n));
+    const explainParts = [];
+    
+    if (usedFromLastWeek.length > 0) {
+      explainParts.push(`지난 주 번호 ${usedFromLastWeek.join(', ')}를 기반으로`);
     }
     
-    // Spread / entropy comment
-    const spread = spreadScore(ticket);
-    explainParts.push("숫자 분포가 적절히 퍼져 있습니다.");
+    explainParts.push("통계적으로 자주 연속해서 나타나는 숫자들을 조합했습니다.");
     
-    // Build explanation
-    const explain = explainParts.join(" ");
-    
-    final.push({ ticket, explain });
+    final.push({
+      ticket: markovTicket,
+      explain: explainParts.join(" ")
+    });
+  } else {
+    // Fallback for Markov strategy if no last week data
+    const fallbackTicket = sampleTicket(bayesWeights);
+    final.push({
+      ticket: fallbackTicket,
+      explain: "마르코프 전략: 데이터 부족으로 대체 조합을 생성했습니다."
+    });
   }
   
   // Fallback: if not enough valid found, fill remaining with high-entropy random ones
   while (final.length < 5) {
     const ticket = sampleTicket(bayesWeights);
     if (final.some(f => isTooSimilar(f.ticket, ticket))) continue;
+    if (isSequential(ticket)) continue;
+    
     final.push({
       ticket: ticket.sort((a, b) => a - b),
       explain: "충분한 검증 조합이 없어서 다양성 높은 대체 조합입니다."
     });
   }
   
-  return final.slice(0, 5);
+  // Ensure we return exactly 5 combinations
+  if (final.length > 5) {
+    final.splice(5);
+  }
+  
+  return final;
 } 

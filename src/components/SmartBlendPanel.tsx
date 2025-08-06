@@ -8,24 +8,6 @@ interface SmartBlendPanelProps {
   progressPercent: number;
 }
 
-const RISK_STRATEGIES = [
-  {
-    value: 0,
-    label: '안심 전략',
-    desc: '안전한 번호 조합으로 5등 이상 당첨 확률을 높입니다'
-  },
-  {
-    value: 1,
-    label: '균형 전략', 
-    desc: '안전성과 수익성을 균형있게 조합합니다'
-  },
-  {
-    value: 2,
-    label: '공격 전략',
-    desc: '높은 당첨금을 노리는 도전적인 조합입니다'
-  }
-];
-
 export default function SmartBlendPanel({
   riskLevel,
   setRiskLevel,
@@ -35,23 +17,22 @@ export default function SmartBlendPanel({
 }: SmartBlendPanelProps) {
   return (
     <div className="smart-blend-panel">
-      {/* Risk Strategy Selection */}
+      {/* Strategy Description */}
       <div className="mb-6">
-        <h3 className="text-lg font-semibold mb-4 text-gray-800">전략 선택</h3>
-        <div className="flex gap-3 mb-2 justify-center">
-          {RISK_STRATEGIES.map((strategy) => (
-            <button
-              key={strategy.value}
-              onClick={() => setRiskLevel(strategy.value)}
-              className={`personal-method-btn${riskLevel === strategy.value ? ' selected' : ''}`}
-              aria-label={`${strategy.label} 선택`}
-            >
-              {strategy.label}
-            </button>
-          ))}
-        </div>
-        <div className="text-center text-sm text-gray-600 mb-4">
-          {RISK_STRATEGIES[riskLevel]?.desc}
+        <h3 className="text-lg font-semibold mb-4 text-gray-800 text-center">AI 추첨기 전략</h3>
+        <div className="text-center text-sm text-gray-600 mb-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+          <p className="mb-2">
+            <strong>추천 1:</strong> 안심 전략 - 안전한 번호 조합으로 5등 이상 당첨 확률을 높입니다
+          </p>
+          <p className="mb-2">
+            <strong>추천 2:</strong> 공격 전략 - 높은 당첨금을 노리는 도전적인 조합입니다
+          </p>
+          <p className="mb-2">
+            <strong>추천 3-4:</strong> 균형 전략 - 안전성과 수익성을 균형있게 조합합니다
+          </p>
+          <p>
+            <strong>추천 5:</strong> 마르코프 전략 - 지난 주 당첨번호를 기반으로 한 통계적 분석
+          </p>
         </div>
       </div>
 

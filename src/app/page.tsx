@@ -30,7 +30,7 @@ interface LottoHistoryDraw {
 
 
 export default function Home() {
-  const { user, loading: authLoading, isGuest, saveAsGuest } = useAuth();
+  const { user, loading: authLoading, isGuest, saveAsGuest, openAuthModal } = useAuth();
   const { history, loading, error, latestDraw } = useLottoHistory();
   const {
     riskLevel,
@@ -274,7 +274,7 @@ export default function Home() {
               <UserMenu />
             ) : (
               <button
-                onClick={() => saveAsGuest()}
+                onClick={() => openAuthModal()}
                 className="login-button"
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -600,7 +600,7 @@ export default function Home() {
                 onClick={handleGenerate}
                 disabled={isGenerateDisabled || isGenerating}
               >
-                <span role="img" aria-label="dice">🎲</span> 5개 번호 생성하기
+                <span role="img" aria-label="dice">🎲</span> AI 추첨기 실행
               </button>
               {smartBlendResults.length > 0 && (
                 <button
@@ -677,7 +677,7 @@ export default function Home() {
               <span role="img" aria-label="sparkles">✨</span> AI 추첨기 추천 조합
             </h2>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" style={{ width: '100%' }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4" style={{ width: '100%' }}>
               {smartBlendResults.map((result, index) => (
                 <div key={index} className="relative">
                   <div className={`border-2 rounded-xl p-4 transition-all duration-200 ${
@@ -698,7 +698,9 @@ export default function Home() {
                         <h3 className={`font-semibold ${
                           index === highlightedIndex ? 'text-blue-800' : 'text-gray-700'
                         }`}>
-                          추천 {index + 1}
+                          {index === 0 ? '안심 전략' : 
+                           index === 1 ? '공격 전략' : 
+                           index === 4 ? '마르코프 전략' : '균형 전략'}
                         </h3>
                       </div>
                       
@@ -735,6 +737,11 @@ export default function Home() {
                           저장
                         </button>
                       </div>
+                    </div>
+                    
+                    {/* Explanation text below */}
+                    <div className="mt-2 text-xs text-gray-600 text-center">
+                      {result.explain}
                     </div>
                   </div>
                 </div>
